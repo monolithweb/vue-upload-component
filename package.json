@@ -10,7 +10,7 @@
   "main": "dist/vue-upload-component.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lian-yue/vue-upload-component.git"
+    "url": "git+https://github.com/monolithweb/vue-upload-component"
   },
   "keywords": [
     "vue.js",
