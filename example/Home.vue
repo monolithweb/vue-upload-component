@@ -84,6 +84,7 @@ table th,table td {
                 :extensions="extensions"
                 :accept="accept"
                 :multiple="multiple"
+                :zip="zip"
                 :size="size || 0"
                 :thread="thread < 1 ? 1 : (thread > 5 ? 5 : thread)"
                 :headers="headers"
@@ -125,6 +126,11 @@ table th,table td {
             <td>
               <label>
                 Multiple: <input type="checkbox" id="checkbox" v-model="multiple">
+              </label>
+            </td>
+            <td>
+              <label>
+                Zip: <input type="checkbox" id="checkbox" v-model="zip">
               </label>
             </td>
             <td>
@@ -174,7 +180,8 @@ export default {
       accept: '',
       size: 1024 * 1024 * 10,
       multiple: true,
-      extensions: 'gif,jpg,png',
+      zip: true,
+      extensions: 'gif,jpg,png,stl',
       // extensions: ['gif','jpg','png'],
       // extensions: /\.(gif|png|jpg)$/i,
       files: [],
@@ -185,15 +192,14 @@ export default {
       thread: 1,
       name: 'file',
 
-      postAction: './post.php',
-      putAction: './put.php',
+      postAction: 'https://aviram.cloud.yo/commni/test.php',
+      putAction: "",
+
 
       headers: {
-        "X-Csrf-Token": "xxxx",
       },
 
       data: {
-        "_csrf_token": "xxxxxx",
       },
 
       events: {
@@ -202,7 +208,7 @@ export default {
           if (this.$parent.auto) {
             component.active = true;
           }
-          file.headers['X-Filename'] = encodeURIComponent(file.name)
+          //file.headers['X-Filename'] = encodeURIComponent(file.name)
           file.data.finename = file.name
 
           // file.putAction = 'xxx'
