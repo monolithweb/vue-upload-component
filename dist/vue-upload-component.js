@@ -8094,6 +8094,10 @@ module.exports =
 	        zip: {
 	            type: Boolean,
 	            default: false
+	        },
+	        zipCompressionLevel: {
+	            type: Number,
+	            default: 9
 	        }
 	    },
 	
@@ -8278,7 +8282,7 @@ module.exports =
 	                reader.onload = function (e) {
 	                    var zip = new _jszip2.default();
 	                    zip.file(file.name, reader.result);
-	                    zip.generateAsync({ type: "blob", compression: 'DEFLATE', compressionOptions: { level: 9 } }).then(function (blobData) {
+	                    zip.generateAsync({ type: "blob", compression: 'DEFLATE', compressionOptions: { level: self.zipCompressionLevel } }).then(function (blobData) {
 	                        file['blob'] = blobData;
 	                        onFileReadyToUpload(file);
 	                    });
@@ -8332,7 +8336,7 @@ module.exports =
 	        _onDragleave: function _onDragleave(e) {
 	            e.preventDefault();
 	            this._dropActive--;
-	            if (e.target.nodeName == 'HTML' || e.screenX == 0 && e.screenY == 0) {
+	            if (e.target.nodeName == 'HTML' || e.clientX <= 0 || e.clientX >= window.innerWidth || e.clientY <= 0 || e.clientY >= window.innerHeight) {
 	                this.dropActive = !!this._dropActive;
 	            }
 	        },
