@@ -8336,7 +8336,7 @@ module.exports =
 	        _onDragleave: function _onDragleave(e) {
 	            e.preventDefault();
 	            this._dropActive--;
-	            if (e.target.nodeName == 'HTML' || e.clientX <= 0 || e.clientX >= window.innerWidth || e.clientY <= 0 || e.clientY >= window.innerHeight) {
+	            if (e.target.nodeName == 'HTML' || e.target.nodeName == 'DIV' || e.clientX <= 0 || e.clientX >= window.innerWidth || e.clientY <= 0 || e.clientY >= window.innerHeight) {
 	                this.dropActive = !!this._dropActive;
 	            }
 	        },
