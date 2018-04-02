@@ -47,7 +47,7 @@ module.exports =
 
 	'use strict';
 	
-	module.exports = __webpack_require__(163);
+	module.exports = __webpack_require__(161);
 
 /***/ }),
 /* 1 */
@@ -57,8 +57,8 @@ module.exports =
 	
 	var support = __webpack_require__(5);
 	var base64 = __webpack_require__(62);
-	var nodejsUtils = __webpack_require__(29);
-	var setImmediate = __webpack_require__(94);
+	var nodejsUtils = __webpack_require__(28);
+	var setImmediate = __webpack_require__(95);
 	var external = __webpack_require__(20);
 	
 	
@@ -81,18 +81,23 @@ module.exports =
 	
 	/**
 	 * Create a new blob with the given content and the given type.
-	 * @param {Array[String|ArrayBuffer]} parts the content to put in the blob. DO NOT use
+	 * @param {String|ArrayBuffer} part the content to put in the blob. DO NOT use
 	 * an Uint8Array because the stock browser of android 4 won't accept it (it
 	 * will be silently converted to a string, "[object Uint8Array]").
+	 *
+	 * Use only ONE part to build the blob to avoid a memory leak in IE11 / Edge:
+	 * when a large amount of Array is used to create the Blob, the amount of
+	 * memory consumed is nearly 100 times the original data amount.
+	 *
 	 * @param {String} type the mime type of the blob.
 	 * @return {Blob} the created blob.
 	 */
-	exports.newBlob = function(parts, type) {
+	exports.newBlob = function(part, type) {
 	    exports.checkSupport("blob");
 	
 	    try {
 	        // Blob constructor
-	        return new Blob(parts, {
+	        return new Blob([part], {
 	            type: type
 	        });
 	    }
@@ -100,11 +105,9 @@ module.exports =
 	
 	        try {
 	            // deprecated, browser only, old way
-	            var Builder = window.BlobBuilder || window.WebKitBlobBuilder || window.MozBlobBuilder || window.MSBlobBuilder;
+	            var Builder = self.BlobBuilder || self.WebKitBlobBuilder || self.MozBlobBuilder || self.MSBlobBuilder;
 	            var builder = new Builder();
-	            for (var i = 0; i < parts.length; i++) {
-	                builder.append(parts[i]);
-	            }
+	            builder.append(part);
 	            return builder.getBlob(type);
 	        }
 	        catch (e) {
@@ -200,7 +203,7 @@ module.exports =
 	         */
 	        nodebuffer : (function () {
 	            try {
-	                return support.nodebuffer && String.fromCharCode.apply(null, nodejsUtils.newBuffer(1)).length === 1;
+	                return support.nodebuffer && String.fromCharCode.apply(null, nodejsUtils.allocBuffer(1)).length === 1;
 	            } catch (e) {
 	                return false;
 	            }
@@ -280,7 +283,7 @@ module.exports =
 	        return stringToArrayLike(input, new Uint8Array(input.length));
 	    },
 	    "nodebuffer": function(input) {
-	        return stringToArrayLike(input, nodejsUtils.newBuffer(input.length));
+	        return stringToArrayLike(input, nodejsUtils.allocBuffer(input.length));
 	    }
 	};
 	
@@ -295,7 +298,7 @@ module.exports =
 	        return new Uint8Array(input);
 	    },
 	    "nodebuffer": function(input) {
-	        return nodejsUtils.newBuffer(input);
+	        return nodejsUtils.newBufferFrom(input);
 	    }
 	};
 	
@@ -312,7 +315,7 @@ module.exports =
 	        return new Uint8Array(input);
 	    },
 	    "nodebuffer": function(input) {
-	        return nodejsUtils.newBuffer(new Uint8Array(input));
+	        return nodejsUtils.newBufferFrom(new Uint8Array(input));
 	    }
 	};
 	
@@ -323,17 +326,11 @@ module.exports =
 	        return arrayLikeToArrayLike(input, new Array(input.length));
 	    },
 	    "arraybuffer": function(input) {
-	        // copy the uint8array: DO NOT propagate the original ArrayBuffer, it
-	        // can be way larger (the whole zip file for example).
-	        var copy = new Uint8Array(input.length);
-	        if (input.length) {
-	            copy.set(input, 0);
-	        }
-	        return copy.buffer;
+	        return input.buffer;
 	    },
 	    "uint8array": identity,
 	    "nodebuffer": function(input) {
-	        return nodejsUtils.newBuffer(input);
+	        return nodejsUtils.newBufferFrom(input);
 	    }
 	};
 	
@@ -509,7 +506,8 @@ module.exports =
 	
 	        if (!dataType) {
 	            return external.Promise.reject(
-	                new Error("The data of '" + name + "' is in an unsupported format !")
+	                new Error("Can't read the data of '" + name + "'. Is it " +
+	                          "in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?")
 	            );
 	        }
 	        // special case : it's way easier to work with Uint8Array than with ArrayBuffer
@@ -816,7 +814,7 @@ module.exports =
 	
 	'use strict'
 	
-	var base64 = __webpack_require__(91)
+	var base64 = __webpack_require__(92)
 	var ieee754 = __webpack_require__(127)
 	var isArray = __webpack_require__(61)
 	
@@ -2604,8 +2602,11 @@ module.exports =
 
 	// https://github.com/zloirock/core-js/issues/86#issuecomment-115759028
 	var global = module.exports = typeof window != 'undefined' && window.Math == Math
-	  ? window : typeof self != 'undefined' && self.Math == Math ? self : Function('return this')();
-	if(typeof __g == 'number')__g = global; // eslint-disable-line no-undef
+	  ? window : typeof self != 'undefined' && self.Math == Math ? self
+	  // eslint-disable-next-line no-new-func
+	  : Function('return this')();
+	if (typeof __g == 'number') __g = global; // eslint-disable-line no-undef
+
 
 /***/ }),
 /* 5 */
@@ -2633,7 +2634,7 @@ module.exports =
 	    }
 	    catch (e) {
 	        try {
-	            var Builder = window.BlobBuilder || window.WebKitBlobBuilder || window.MozBlobBuilder || window.MSBlobBuilder;
+	            var Builder = self.BlobBuilder || self.WebKitBlobBuilder || self.MozBlobBuilder || self.MSBlobBuilder;
 	            var builder = new Builder();
 	            builder.append(buffer);
 	            exports.blob = builder.getBlob('application/zip').size === 0;
@@ -2663,6 +2664,9 @@ module.exports =
 	                (typeof Uint16Array !== 'undefined') &&
 	                (typeof Int32Array !== 'undefined');
 	
+	function _has(obj, key) {
+	  return Object.prototype.hasOwnProperty.call(obj, key);
+	}
 	
 	exports.assign = function (obj /*from1, from2, from3, ...*/) {
 	  var sources = Array.prototype.slice.call(arguments, 1);
@@ -2675,7 +2679,7 @@ module.exports =
 	    }
 	
 	    for (var p in source) {
-	      if (source.hasOwnProperty(p)) {
+	      if (_has(source, p)) {
 	        obj[p] = source[p];
 	      }
 	    }
@@ -2765,52 +2769,13 @@ module.exports =
 /***/ (function(module, exports) {
 
 	var hasOwnProperty = {}.hasOwnProperty;
-	module.exports = function(it, key){
+	module.exports = function (it, key) {
 	  return hasOwnProperty.call(it, key);
 	};
 
+
 /***/ }),
 /* 8 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	// to indexed object, toObject with fallback for non-array-like ES3 strings
-	var IObject = __webpack_require__(54)
-	  , defined = __webpack_require__(32);
-	module.exports = function(it){
-	  return IObject(defined(it));
-	};
-
-/***/ }),
-/* 9 */
-/***/ (function(module, exports) {
-
-	if (typeof Object.create === 'function') {
-	  // implementation from standard node.js 'util' module
-	  module.exports = function inherits(ctor, superCtor) {
-	    ctor.super_ = superCtor
-	    ctor.prototype = Object.create(superCtor.prototype, {
-	      constructor: {
-	        value: ctor,
-	        enumerable: false,
-	        writable: true,
-	        configurable: true
-	      }
-	    });
-	  };
-	} else {
-	  // old school shim for old browsers
-	  module.exports = function inherits(ctor, superCtor) {
-	    ctor.super_ = superCtor
-	    var TempCtor = function () {}
-	    TempCtor.prototype = superCtor.prototype
-	    ctor.prototype = new TempCtor()
-	    ctor.prototype.constructor = ctor
-	  }
-	}
-
-
-/***/ }),
-/* 10 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	// a duplex stream is just a stream that is both readable and writable.
@@ -2838,7 +2803,7 @@ module.exports =
 	
 	/*<replacement>*/
 	var util = __webpack_require__(19);
-	util.inherits = __webpack_require__(9);
+	util.inherits = __webpack_require__(15);
 	/*</replacement>*/
 	
 	var Readable = __webpack_require__(81);
@@ -2890,70 +2855,116 @@ module.exports =
 	}
 
 /***/ }),
-/* 11 */
+/* 9 */
 /***/ (function(module, exports) {
 
-	var core = module.exports = {version: '2.3.0'};
-	if(typeof __e == 'number')__e = core; // eslint-disable-line no-undef
+	var core = module.exports = { version: '2.5.4' };
+	if (typeof __e == 'number') __e = core; // eslint-disable-line no-undef
+
+
+/***/ }),
+/* 10 */
+/***/ (function(module, exports, __webpack_require__) {
+
+	// Thank's IE8 for his funny defineProperty
+	module.exports = !__webpack_require__(17)(function () {
+	  return Object.defineProperty({}, 'a', { get: function () { return 7; } }).a != 7;
+	});
+
+
+/***/ }),
+/* 11 */
+/***/ (function(module, exports, __webpack_require__) {
+
+	var dP = __webpack_require__(12);
+	var createDesc = __webpack_require__(25);
+	module.exports = __webpack_require__(10) ? function (object, key, value) {
+	  return dP.f(object, key, createDesc(1, value));
+	} : function (object, key, value) {
+	  object[key] = value;
+	  return object;
+	};
+
 
 /***/ }),
 /* 12 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	// Thank's IE8 for his funny defineProperty
-	module.exports = !__webpack_require__(17)(function(){
-	  return Object.defineProperty({}, 'a', {get: function(){ return 7; }}).a != 7;
-	});
+	var anObject = __webpack_require__(21);
+	var IE8_DOM_DEFINE = __webpack_require__(53);
+	var toPrimitive = __webpack_require__(42);
+	var dP = Object.defineProperty;
+	
+	exports.f = __webpack_require__(10) ? Object.defineProperty : function defineProperty(O, P, Attributes) {
+	  anObject(O);
+	  P = toPrimitive(P, true);
+	  anObject(Attributes);
+	  if (IE8_DOM_DEFINE) try {
+	    return dP(O, P, Attributes);
+	  } catch (e) { /* empty */ }
+	  if ('get' in Attributes || 'set' in Attributes) throw TypeError('Accessors not supported!');
+	  if ('value' in Attributes) O[P] = Attributes.value;
+	  return O;
+	};
+
 
 /***/ }),
 /* 13 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var dP         = __webpack_require__(14)
-	  , createDesc = __webpack_require__(26);
-	module.exports = __webpack_require__(12) ? function(object, key, value){
-	  return dP.f(object, key, createDesc(1, value));
-	} : function(object, key, value){
-	  object[key] = value;
-	  return object;
+	// to indexed object, toObject with fallback for non-array-like ES3 strings
+	var IObject = __webpack_require__(54);
+	var defined = __webpack_require__(32);
+	module.exports = function (it) {
+	  return IObject(defined(it));
 	};
+
 
 /***/ }),
 /* 14 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var anObject       = __webpack_require__(22)
-	  , IE8_DOM_DEFINE = __webpack_require__(53)
-	  , toPrimitive    = __webpack_require__(42)
-	  , dP             = Object.defineProperty;
+	var store = __webpack_require__(40)('wks');
+	var uid = __webpack_require__(26);
+	var Symbol = __webpack_require__(4).Symbol;
+	var USE_SYMBOL = typeof Symbol == 'function';
 	
-	exports.f = __webpack_require__(12) ? Object.defineProperty : function defineProperty(O, P, Attributes){
-	  anObject(O);
-	  P = toPrimitive(P, true);
-	  anObject(Attributes);
-	  if(IE8_DOM_DEFINE)try {
-	    return dP(O, P, Attributes);
-	  } catch(e){ /* empty */ }
-	  if('get' in Attributes || 'set' in Attributes)throw TypeError('Accessors not supported!');
-	  if('value' in Attributes)O[P] = Attributes.value;
-	  return O;
-	};
-
-/***/ }),
-/* 15 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	var store      = __webpack_require__(40)('wks')
-	  , uid        = __webpack_require__(27)
-	  , Symbol     = __webpack_require__(4).Symbol
-	  , USE_SYMBOL = typeof Symbol == 'function';
-	
-	var $exports = module.exports = function(name){
+	var $exports = module.exports = function (name) {
 	  return store[name] || (store[name] =
 	    USE_SYMBOL && Symbol[name] || (USE_SYMBOL ? Symbol : uid)('Symbol.' + name));
 	};
 	
 	$exports.store = store;
+
+
+/***/ }),
+/* 15 */
+/***/ (function(module, exports) {
+
+	if (typeof Object.create === 'function') {
+	  // implementation from standard node.js 'util' module
+	  module.exports = function inherits(ctor, superCtor) {
+	    ctor.super_ = superCtor
+	    ctor.prototype = Object.create(superCtor.prototype, {
+	      constructor: {
+	        value: ctor,
+	        enumerable: false,
+	        writable: true,
+	        configurable: true
+	      }
+	    });
+	  };
+	} else {
+	  // old school shim for old browsers
+	  module.exports = function inherits(ctor, superCtor) {
+	    ctor.super_ = superCtor
+	    var TempCtor = function () {}
+	    TempCtor.prototype = superCtor.prototype
+	    ctor.prototype = new TempCtor()
+	    ctor.prototype.constructor = ctor
+	  }
+	}
+
 
 /***/ }),
 /* 16 */
@@ -2963,7 +2974,7 @@ module.exports =
 	
 	var utils = __webpack_require__(1);
 	var support = __webpack_require__(5);
-	var nodejsUtils = __webpack_require__(29);
+	var nodejsUtils = __webpack_require__(28);
 	var GenericWorker = __webpack_require__(2);
 	
 	/**
@@ -3129,7 +3140,7 @@ module.exports =
 	 */
 	exports.utf8encode = function utf8encode(str) {
 	    if (support.nodebuffer) {
-	        return nodejsUtils.newBuffer(str, "utf-8");
+	        return nodejsUtils.newBufferFrom(str, "utf-8");
 	    }
 	
 	    return string2buf(str);
@@ -3240,25 +3251,23 @@ module.exports =
 /* 17 */
 /***/ (function(module, exports) {
 
-	module.exports = function(exec){
+	module.exports = function (exec) {
 	  try {
 	    return !!exec();
-	  } catch(e){
+	  } catch (e) {
 	    return true;
 	  }
 	};
 
+
 /***/ }),
 /* 18 */
-/***/ (function(module, exports, __webpack_require__) {
+/***/ (function(module, exports) {
 
-	// 19.1.2.14 / 15.2.3.14 Object.keys(O)
-	var $keys       = __webpack_require__(58)
-	  , enumBugKeys = __webpack_require__(34);
-	
-	module.exports = Object.keys || function keys(O){
-	  return $keys(O, enumBugKeys);
+	module.exports = function (it) {
+	  return typeof it === 'object' ? it !== null : typeof it === 'function';
 	};
+
 
 /***/ }),
 /* 19 */
@@ -3401,230 +3410,42 @@ module.exports =
 
 /***/ }),
 /* 21 */
-/***/ (function(module, exports) {
+/***/ (function(module, exports, __webpack_require__) {
 
-	// shim for using process in browser
-	var process = module.exports = {};
-	
-	// cached from whatever global is present so that test runners that stub it
-	// don't break things.  But we need to wrap it in a try catch in case it is
-	// wrapped in strict mode code which doesn't define any globals.  It's inside a
-	// function because try/catches deoptimize in certain engines.
-	
-	var cachedSetTimeout;
-	var cachedClearTimeout;
-	
-	function defaultSetTimout() {
-	    throw new Error('setTimeout has not been defined');
-	}
-	function defaultClearTimeout () {
-	    throw new Error('clearTimeout has not been defined');
-	}
-	(function () {
-	    try {
-	        if (typeof setTimeout === 'function') {
-	            cachedSetTimeout = setTimeout;
-	        } else {
-	            cachedSetTimeout = defaultSetTimout;
-	        }
-	    } catch (e) {
-	        cachedSetTimeout = defaultSetTimout;
-	    }
-	    try {
-	        if (typeof clearTimeout === 'function') {
-	            cachedClearTimeout = clearTimeout;
-	        } else {
-	            cachedClearTimeout = defaultClearTimeout;
-	        }
-	    } catch (e) {
-	        cachedClearTimeout = defaultClearTimeout;
-	    }
-	} ())
-	function runTimeout(fun) {
-	    if (cachedSetTimeout === setTimeout) {
-	        //normal enviroments in sane situations
-	        return setTimeout(fun, 0);
-	    }
-	    // if setTimeout wasn't available but was latter defined
-	    if ((cachedSetTimeout === defaultSetTimout || !cachedSetTimeout) && setTimeout) {
-	        cachedSetTimeout = setTimeout;
-	        return setTimeout(fun, 0);
-	    }
-	    try {
-	        // when when somebody has screwed with setTimeout but no I.E. maddness
-	        return cachedSetTimeout(fun, 0);
-	    } catch(e){
-	        try {
-	            // When we are in I.E. but the script has been evaled so I.E. doesn't trust the global object when called normally
-	            return cachedSetTimeout.call(null, fun, 0);
-	        } catch(e){
-	            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error
-	            return cachedSetTimeout.call(this, fun, 0);
-	        }
-	    }
-	
-	
-	}
-	function runClearTimeout(marker) {
-	    if (cachedClearTimeout === clearTimeout) {
-	        //normal enviroments in sane situations
-	        return clearTimeout(marker);
-	    }
-	    // if clearTimeout wasn't available but was latter defined
-	    if ((cachedClearTimeout === defaultClearTimeout || !cachedClearTimeout) && clearTimeout) {
-	        cachedClearTimeout = clearTimeout;
-	        return clearTimeout(marker);
-	    }
-	    try {
-	        // when when somebody has screwed with setTimeout but no I.E. maddness
-	        return cachedClearTimeout(marker);
-	    } catch (e){
-	        try {
-	            // When we are in I.E. but the script has been evaled so I.E. doesn't  trust the global object when called normally
-	            return cachedClearTimeout.call(null, marker);
-	        } catch (e){
-	            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error.
-	            // Some versions of I.E. have different rules for clearTimeout vs setTimeout
-	            return cachedClearTimeout.call(this, marker);
-	        }
-	    }
-	
-	
-	
-	}
-	var queue = [];
-	var draining = false;
-	var currentQueue;
-	var queueIndex = -1;
-	
-	function cleanUpNextTick() {
-	    if (!draining || !currentQueue) {
-	        return;
-	    }
-	    draining = false;
-	    if (currentQueue.length) {
-	        queue = currentQueue.concat(queue);
-	    } else {
-	        queueIndex = -1;
-	    }
-	    if (queue.length) {
-	        drainQueue();
-	    }
-	}
-	
-	function drainQueue() {
-	    if (draining) {
-	        return;
-	    }
-	    var timeout = runTimeout(cleanUpNextTick);
-	    draining = true;
-	
-	    var len = queue.length;
-	    while(len) {
-	        currentQueue = queue;
-	        queue = [];
-	        while (++queueIndex < len) {
-	            if (currentQueue) {
-	                currentQueue[queueIndex].run();
-	            }
-	        }
-	        queueIndex = -1;
-	        len = queue.length;
-	    }
-	    currentQueue = null;
-	    draining = false;
-	    runClearTimeout(timeout);
-	}
-	
-	process.nextTick = function (fun) {
-	    var args = new Array(arguments.length - 1);
-	    if (arguments.length > 1) {
-	        for (var i = 1; i < arguments.length; i++) {
-	            args[i - 1] = arguments[i];
-	        }
-	    }
-	    queue.push(new Item(fun, args));
-	    if (queue.length === 1 && !draining) {
-	        runTimeout(drainQueue);
-	    }
+	var isObject = __webpack_require__(18);
+	module.exports = function (it) {
+	  if (!isObject(it)) throw TypeError(it + ' is not an object!');
+	  return it;
 	};
-	
-	// v8 likes predictible objects
-	function Item(fun, array) {
-	    this.fun = fun;
-	    this.array = array;
-	}
-	Item.prototype.run = function () {
-	    this.fun.apply(null, this.array);
-	};
-	process.title = 'browser';
-	process.browser = true;
-	process.env = {};
-	process.argv = [];
-	process.version = ''; // empty string to avoid regexp issues
-	process.versions = {};
-	
-	function noop() {}
-	
-	process.on = noop;
-	process.addListener = noop;
-	process.once = noop;
-	process.off = noop;
-	process.removeListener = noop;
-	process.removeAllListeners = noop;
-	process.emit = noop;
-	process.prependListener = noop;
-	process.prependOnceListener = noop;
-	
-	process.listeners = function (name) { return [] }
-	
-	process.binding = function (name) {
-	    throw new Error('process.binding is not supported');
-	};
-	
-	process.cwd = function () { return '/' };
-	process.chdir = function (dir) {
-	    throw new Error('process.chdir is not supported');
-	};
-	process.umask = function() { return 0; };
 
 
 /***/ }),
 /* 22 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var isObject = __webpack_require__(24);
-	module.exports = function(it){
-	  if(!isObject(it))throw TypeError(it + ' is not an object!');
-	  return it;
-	};
-
-/***/ }),
-/* 23 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	var global    = __webpack_require__(4)
-	  , core      = __webpack_require__(11)
-	  , ctx       = __webpack_require__(51)
-	  , hide      = __webpack_require__(13)
-	  , PROTOTYPE = 'prototype';
+	var global = __webpack_require__(4);
+	var core = __webpack_require__(9);
+	var ctx = __webpack_require__(51);
+	var hide = __webpack_require__(11);
+	var has = __webpack_require__(7);
+	var PROTOTYPE = 'prototype';
 	
-	var $export = function(type, name, source){
-	  var IS_FORCED = type & $export.F
-	    , IS_GLOBAL = type & $export.G
-	    , IS_STATIC = type & $export.S
-	    , IS_PROTO  = type & $export.P
-	    , IS_BIND   = type & $export.B
-	    , IS_WRAP   = type & $export.W
-	    , exports   = IS_GLOBAL ? core : core[name] || (core[name] = {})
-	    , expProto  = exports[PROTOTYPE]
-	    , target    = IS_GLOBAL ? global : IS_STATIC ? global[name] : (global[name] || {})[PROTOTYPE]
-	    , key, own, out;
-	  if(IS_GLOBAL)source = name;
-	  for(key in source){
+	var $export = function (type, name, source) {
+	  var IS_FORCED = type & $export.F;
+	  var IS_GLOBAL = type & $export.G;
+	  var IS_STATIC = type & $export.S;
+	  var IS_PROTO = type & $export.P;
+	  var IS_BIND = type & $export.B;
+	  var IS_WRAP = type & $export.W;
+	  var exports = IS_GLOBAL ? core : core[name] || (core[name] = {});
+	  var expProto = exports[PROTOTYPE];
+	  var target = IS_GLOBAL ? global : IS_STATIC ? global[name] : (global[name] || {})[PROTOTYPE];
+	  var key, own, out;
+	  if (IS_GLOBAL) source = name;
+	  for (key in source) {
 	    // contains in native
 	    own = !IS_FORCED && target && target[key] !== undefined;
-	    if(own && key in exports)continue;
+	    if (own && has(exports, key)) continue;
 	    // export native or passed
 	    out = own ? target[key] : source[key];
 	    // prevent global pollution for namespaces
@@ -3632,11 +3453,11 @@ module.exports =
 	    // bind timers to global for call from export context
 	    : IS_BIND && own ? ctx(out, global)
 	    // wrap global constructors for prevent change them in library
-	    : IS_WRAP && target[key] == out ? (function(C){
-	      var F = function(a, b, c){
-	        if(this instanceof C){
-	          switch(arguments.length){
-	            case 0: return new C;
+	    : IS_WRAP && target[key] == out ? (function (C) {
+	      var F = function (a, b, c) {
+	        if (this instanceof C) {
+	          switch (arguments.length) {
+	            case 0: return new C();
 	            case 1: return new C(a);
 	            case 2: return new C(a, b);
 	          } return new C(a, b, c);
@@ -3647,10 +3468,10 @@ module.exports =
 	    // make static versions for prototype methods
 	    })(out) : IS_PROTO && typeof out == 'function' ? ctx(Function.call, out) : out;
 	    // export proto methods to core.%CONSTRUCTOR%.methods.%NAME%
-	    if(IS_PROTO){
+	    if (IS_PROTO) {
 	      (exports.virtual || (exports.virtual = {}))[key] = out;
 	      // export proto methods to core.%CONSTRUCTOR%.prototype.%NAME%
-	      if(type & $export.R && expProto && !expProto[key])hide(expProto, key, out);
+	      if (type & $export.R && expProto && !expProto[key]) hide(expProto, key, out);
 	    }
 	  }
 	};
@@ -3662,48 +3483,57 @@ module.exports =
 	$export.B = 16;  // bind
 	$export.W = 32;  // wrap
 	$export.U = 64;  // safe
-	$export.R = 128; // real proto method for `library` 
+	$export.R = 128; // real proto method for `library`
 	module.exports = $export;
+
+
+/***/ }),
+/* 23 */
+/***/ (function(module, exports, __webpack_require__) {
+
+	// 19.1.2.14 / 15.2.3.14 Object.keys(O)
+	var $keys = __webpack_require__(58);
+	var enumBugKeys = __webpack_require__(34);
+	
+	module.exports = Object.keys || function keys(O) {
+	  return $keys(O, enumBugKeys);
+	};
+
 
 /***/ }),
 /* 24 */
 /***/ (function(module, exports) {
 
-	module.exports = function(it){
-	  return typeof it === 'object' ? it !== null : typeof it === 'function';
-	};
+	exports.f = {}.propertyIsEnumerable;
+
 
 /***/ }),
 /* 25 */
 /***/ (function(module, exports) {
 
-	exports.f = {}.propertyIsEnumerable;
+	module.exports = function (bitmap, value) {
+	  return {
+	    enumerable: !(bitmap & 1),
+	    configurable: !(bitmap & 2),
+	    writable: !(bitmap & 4),
+	    value: value
+	  };
+	};
+
 
 /***/ }),
 /* 26 */
 /***/ (function(module, exports) {
 
-	module.exports = function(bitmap, value){
-	  return {
-	    enumerable  : !(bitmap & 1),
-	    configurable: !(bitmap & 2),
-	    writable    : !(bitmap & 4),
-	    value       : value
-	  };
-	};
-
-/***/ }),
-/* 27 */
-/***/ (function(module, exports) {
-
-	var id = 0
-	  , px = Math.random();
-	module.exports = function(key){
+	var id = 0;
+	var px = Math.random();
+	module.exports = function (key) {
 	  return 'Symbol('.concat(key === undefined ? '' : key, ')_', (++id + px).toString(36));
 	};
 
+
 /***/ }),
-/* 28 */
+/* 27 */
 /***/ (function(module, exports) {
 
 	// Copyright Joyent, Inc. and other Node contributors.
@@ -4011,7 +3841,7 @@ module.exports =
 
 
 /***/ }),
-/* 29 */
+/* 28 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	/* WEBPACK VAR INJECTION */(function(Buffer) {'use strict';
@@ -4024,13 +3854,31 @@ module.exports =
 	     */
 	    isNode : typeof Buffer !== "undefined",
 	    /**
-	     * Create a new nodejs Buffer.
+	     * Create a new nodejs Buffer from an existing content.
 	     * @param {Object} data the data to pass to the constructor.
 	     * @param {String} encoding the encoding to use.
 	     * @return {Buffer} a new Buffer.
 	     */
-	    newBuffer : function(data, encoding){
+	    newBufferFrom: function(data, encoding) {
+	        // XXX We can't use `Buffer.from` which comes from `Uint8Array.from`
+	        // in nodejs v4 (< v.4.5). It's not the expected implementation (and
+	        // has a different signature).
+	        // see https://github.com/nodejs/node/issues/8053
+	        // A condition on nodejs' version won't solve the issue as we don't
+	        // control the Buffer polyfills that may or may not be used.
 	        return new Buffer(data, encoding);
+	    },
+	    /**
+	     * Create a new nodejs Buffer with the specified size.
+	     * @param {Integer} size the size of the buffer.
+	     * @return {Buffer} a new Buffer.
+	     */
+	    allocBuffer: function (size) {
+	        if (Buffer.alloc) {
+	            return Buffer.alloc(size);
+	        } else {
+	            return new Buffer(size);
+	        }
 	    },
 	    /**
 	     * Find out if an object is a Buffer.
@@ -4050,6 +3898,196 @@ module.exports =
 	};
 	
 	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(3).Buffer))
+
+/***/ }),
+/* 29 */
+/***/ (function(module, exports) {
+
+	// shim for using process in browser
+	var process = module.exports = {};
+	
+	// cached from whatever global is present so that test runners that stub it
+	// don't break things.  But we need to wrap it in a try catch in case it is
+	// wrapped in strict mode code which doesn't define any globals.  It's inside a
+	// function because try/catches deoptimize in certain engines.
+	
+	var cachedSetTimeout;
+	var cachedClearTimeout;
+	
+	function defaultSetTimout() {
+	    throw new Error('setTimeout has not been defined');
+	}
+	function defaultClearTimeout () {
+	    throw new Error('clearTimeout has not been defined');
+	}
+	(function () {
+	    try {
+	        if (typeof setTimeout === 'function') {
+	            cachedSetTimeout = setTimeout;
+	        } else {
+	            cachedSetTimeout = defaultSetTimout;
+	        }
+	    } catch (e) {
+	        cachedSetTimeout = defaultSetTimout;
+	    }
+	    try {
+	        if (typeof clearTimeout === 'function') {
+	            cachedClearTimeout = clearTimeout;
+	        } else {
+	            cachedClearTimeout = defaultClearTimeout;
+	        }
+	    } catch (e) {
+	        cachedClearTimeout = defaultClearTimeout;
+	    }
+	} ())
+	function runTimeout(fun) {
+	    if (cachedSetTimeout === setTimeout) {
+	        //normal enviroments in sane situations
+	        return setTimeout(fun, 0);
+	    }
+	    // if setTimeout wasn't available but was latter defined
+	    if ((cachedSetTimeout === defaultSetTimout || !cachedSetTimeout) && setTimeout) {
+	        cachedSetTimeout = setTimeout;
+	        return setTimeout(fun, 0);
+	    }
+	    try {
+	        // when when somebody has screwed with setTimeout but no I.E. maddness
+	        return cachedSetTimeout(fun, 0);
+	    } catch(e){
+	        try {
+	            // When we are in I.E. but the script has been evaled so I.E. doesn't trust the global object when called normally
+	            return cachedSetTimeout.call(null, fun, 0);
+	        } catch(e){
+	            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error
+	            return cachedSetTimeout.call(this, fun, 0);
+	        }
+	    }
+	
+	
+	}
+	function runClearTimeout(marker) {
+	    if (cachedClearTimeout === clearTimeout) {
+	        //normal enviroments in sane situations
+	        return clearTimeout(marker);
+	    }
+	    // if clearTimeout wasn't available but was latter defined
+	    if ((cachedClearTimeout === defaultClearTimeout || !cachedClearTimeout) && clearTimeout) {
+	        cachedClearTimeout = clearTimeout;
+	        return clearTimeout(marker);
+	    }
+	    try {
+	        // when when somebody has screwed with setTimeout but no I.E. maddness
+	        return cachedClearTimeout(marker);
+	    } catch (e){
+	        try {
+	            // When we are in I.E. but the script has been evaled so I.E. doesn't  trust the global object when called normally
+	            return cachedClearTimeout.call(null, marker);
+	        } catch (e){
+	            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error.
+	            // Some versions of I.E. have different rules for clearTimeout vs setTimeout
+	            return cachedClearTimeout.call(this, marker);
+	        }
+	    }
+	
+	
+	
+	}
+	var queue = [];
+	var draining = false;
+	var currentQueue;
+	var queueIndex = -1;
+	
+	function cleanUpNextTick() {
+	    if (!draining || !currentQueue) {
+	        return;
+	    }
+	    draining = false;
+	    if (currentQueue.length) {
+	        queue = currentQueue.concat(queue);
+	    } else {
+	        queueIndex = -1;
+	    }
+	    if (queue.length) {
+	        drainQueue();
+	    }
+	}
+	
+	function drainQueue() {
+	    if (draining) {
+	        return;
+	    }
+	    var timeout = runTimeout(cleanUpNextTick);
+	    draining = true;
+	
+	    var len = queue.length;
+	    while(len) {
+	        currentQueue = queue;
+	        queue = [];
+	        while (++queueIndex < len) {
+	            if (currentQueue) {
+	                currentQueue[queueIndex].run();
+	            }
+	        }
+	        queueIndex = -1;
+	        len = queue.length;
+	    }
+	    currentQueue = null;
+	    draining = false;
+	    runClearTimeout(timeout);
+	}
+	
+	process.nextTick = function (fun) {
+	    var args = new Array(arguments.length - 1);
+	    if (arguments.length > 1) {
+	        for (var i = 1; i < arguments.length; i++) {
+	            args[i - 1] = arguments[i];
+	        }
+	    }
+	    queue.push(new Item(fun, args));
+	    if (queue.length === 1 && !draining) {
+	        runTimeout(drainQueue);
+	    }
+	};
+	
+	// v8 likes predictible objects
+	function Item(fun, array) {
+	    this.fun = fun;
+	    this.array = array;
+	}
+	Item.prototype.run = function () {
+	    this.fun.apply(null, this.array);
+	};
+	process.title = 'browser';
+	process.browser = true;
+	process.env = {};
+	process.argv = [];
+	process.version = ''; // empty string to avoid regexp issues
+	process.versions = {};
+	
+	function noop() {}
+	
+	process.on = noop;
+	process.addListener = noop;
+	process.once = noop;
+	process.off = noop;
+	process.removeListener = noop;
+	process.removeAllListeners = noop;
+	process.emit = noop;
+	process.prependListener = noop;
+	process.prependOnceListener = noop;
+	
+	process.listeners = function (name) { return [] }
+	
+	process.binding = function (name) {
+	    throw new Error('process.binding is not supported');
+	};
+	
+	process.cwd = function () { return '/' };
+	process.chdir = function (dir) {
+	    throw new Error('process.chdir is not supported');
+	};
+	process.umask = function() { return 0; };
+
 
 /***/ }),
 /* 30 */
@@ -4078,8 +4116,8 @@ module.exports =
 	
 	module.exports = Stream;
 	
-	var EE = __webpack_require__(28).EventEmitter;
-	var inherits = __webpack_require__(9);
+	var EE = __webpack_require__(27).EventEmitter;
+	var inherits = __webpack_require__(15);
 	
 	inherits(Stream, EE);
 	Stream.Readable = __webpack_require__(155);
@@ -4190,31 +4228,34 @@ module.exports =
 
 	var toString = {}.toString;
 	
-	module.exports = function(it){
+	module.exports = function (it) {
 	  return toString.call(it).slice(8, -1);
 	};
+
 
 /***/ }),
 /* 32 */
 /***/ (function(module, exports) {
 
 	// 7.2.1 RequireObjectCoercible(argument)
-	module.exports = function(it){
-	  if(it == undefined)throw TypeError("Can't call method on  " + it);
+	module.exports = function (it) {
+	  if (it == undefined) throw TypeError("Can't call method on  " + it);
 	  return it;
 	};
+
 
 /***/ }),
 /* 33 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var isObject = __webpack_require__(24)
-	  , document = __webpack_require__(4).document
-	  // in old IE typeof document.createElement is 'object'
-	  , is = isObject(document) && isObject(document.createElement);
-	module.exports = function(it){
+	var isObject = __webpack_require__(18);
+	var document = __webpack_require__(4).document;
+	// typeof document.createElement is 'object' in old IE
+	var is = isObject(document) && isObject(document.createElement);
+	module.exports = function (it) {
 	  return is ? document.createElement(it) : {};
 	};
+
 
 /***/ }),
 /* 34 */
@@ -4225,11 +4266,13 @@ module.exports =
 	  'constructor,hasOwnProperty,isPrototypeOf,propertyIsEnumerable,toLocaleString,toString,valueOf'
 	).split(',');
 
+
 /***/ }),
 /* 35 */
 /***/ (function(module, exports) {
 
 	module.exports = {};
+
 
 /***/ }),
 /* 36 */
@@ -4237,92 +4280,101 @@ module.exports =
 
 	module.exports = true;
 
+
 /***/ }),
 /* 37 */
 /***/ (function(module, exports) {
 
 	exports.f = Object.getOwnPropertySymbols;
 
+
 /***/ }),
 /* 38 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var def = __webpack_require__(14).f
-	  , has = __webpack_require__(7)
-	  , TAG = __webpack_require__(15)('toStringTag');
+	var def = __webpack_require__(12).f;
+	var has = __webpack_require__(7);
+	var TAG = __webpack_require__(14)('toStringTag');
 	
-	module.exports = function(it, tag, stat){
-	  if(it && !has(it = stat ? it : it.prototype, TAG))def(it, TAG, {configurable: true, value: tag});
+	module.exports = function (it, tag, stat) {
+	  if (it && !has(it = stat ? it : it.prototype, TAG)) def(it, TAG, { configurable: true, value: tag });
 	};
+
 
 /***/ }),
 /* 39 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var shared = __webpack_require__(40)('keys')
-	  , uid    = __webpack_require__(27);
-	module.exports = function(key){
+	var shared = __webpack_require__(40)('keys');
+	var uid = __webpack_require__(26);
+	module.exports = function (key) {
 	  return shared[key] || (shared[key] = uid(key));
 	};
+
 
 /***/ }),
 /* 40 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var global = __webpack_require__(4)
-	  , SHARED = '__core-js_shared__'
-	  , store  = global[SHARED] || (global[SHARED] = {});
-	module.exports = function(key){
+	var global = __webpack_require__(4);
+	var SHARED = '__core-js_shared__';
+	var store = global[SHARED] || (global[SHARED] = {});
+	module.exports = function (key) {
 	  return store[key] || (store[key] = {});
 	};
+
 
 /***/ }),
 /* 41 */
 /***/ (function(module, exports) {
 
 	// 7.1.4 ToInteger
-	var ceil  = Math.ceil
-	  , floor = Math.floor;
-	module.exports = function(it){
+	var ceil = Math.ceil;
+	var floor = Math.floor;
+	module.exports = function (it) {
 	  return isNaN(it = +it) ? 0 : (it > 0 ? floor : ceil)(it);
 	};
+
 
 /***/ }),
 /* 42 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	// 7.1.1 ToPrimitive(input [, PreferredType])
-	var isObject = __webpack_require__(24);
+	var isObject = __webpack_require__(18);
 	// instead of the ES6 spec version, we didn't implement @@toPrimitive case
 	// and the second argument - flag - preferred type is a string
-	module.exports = function(it, S){
-	  if(!isObject(it))return it;
+	module.exports = function (it, S) {
+	  if (!isObject(it)) return it;
 	  var fn, val;
-	  if(S && typeof (fn = it.toString) == 'function' && !isObject(val = fn.call(it)))return val;
-	  if(typeof (fn = it.valueOf) == 'function' && !isObject(val = fn.call(it)))return val;
-	  if(!S && typeof (fn = it.toString) == 'function' && !isObject(val = fn.call(it)))return val;
+	  if (S && typeof (fn = it.toString) == 'function' && !isObject(val = fn.call(it))) return val;
+	  if (typeof (fn = it.valueOf) == 'function' && !isObject(val = fn.call(it))) return val;
+	  if (!S && typeof (fn = it.toString) == 'function' && !isObject(val = fn.call(it))) return val;
 	  throw TypeError("Can't convert object to primitive value");
 	};
+
 
 /***/ }),
 /* 43 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var global         = __webpack_require__(4)
-	  , core           = __webpack_require__(11)
-	  , LIBRARY        = __webpack_require__(36)
-	  , wksExt         = __webpack_require__(44)
-	  , defineProperty = __webpack_require__(14).f;
-	module.exports = function(name){
+	var global = __webpack_require__(4);
+	var core = __webpack_require__(9);
+	var LIBRARY = __webpack_require__(36);
+	var wksExt = __webpack_require__(44);
+	var defineProperty = __webpack_require__(12).f;
+	module.exports = function (name) {
 	  var $Symbol = core.Symbol || (core.Symbol = LIBRARY ? {} : global.Symbol || {});
-	  if(name.charAt(0) != '_' && !(name in $Symbol))defineProperty($Symbol, name, {value: wksExt.f(name)});
+	  if (name.charAt(0) != '_' && !(name in $Symbol)) defineProperty($Symbol, name, { value: wksExt.f(name) });
 	};
+
 
 /***/ }),
 /* 44 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	exports.f = __webpack_require__(15);
+	exports.f = __webpack_require__(14);
+
 
 /***/ }),
 /* 45 */
@@ -4486,7 +4538,6 @@ module.exports =
 	        return crc32str(crc|0, input, input.length, 0);
 	    }
 	};
-	// vim: set shiftwidth=4 softtabstop=4:
 
 
 /***/ }),
@@ -4575,7 +4626,7 @@ module.exports =
 	  }
 	}
 	
-	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(21)))
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(29)))
 
 /***/ }),
 /* 49 */
@@ -4627,11 +4678,11 @@ module.exports =
 	
 	module.exports = Transform;
 	
-	var Duplex = __webpack_require__(10);
+	var Duplex = __webpack_require__(8);
 	
 	/*<replacement>*/
 	var util = __webpack_require__(19);
-	util.inherits = __webpack_require__(9);
+	util.inherits = __webpack_require__(15);
 	/*</replacement>*/
 	
 	util.inherits(Transform, Duplex);
@@ -4790,7 +4841,7 @@ module.exports =
 	
 	/*<replacement>*/
 	var util = __webpack_require__(19);
-	util.inherits = __webpack_require__(9);
+	util.inherits = __webpack_require__(15);
 	/*</replacement>*/
 	
 	/*<replacement>*/
@@ -4805,7 +4856,7 @@ module.exports =
 	  try {
 	    Stream = __webpack_require__(30);
 	  } catch (_) {} finally {
-	    if (!Stream) Stream = __webpack_require__(28).EventEmitter;
+	    if (!Stream) Stream = __webpack_require__(27).EventEmitter;
 	  }
 	})();
 	/*</replacement>*/
@@ -4825,7 +4876,7 @@ module.exports =
 	
 	var Duplex;
 	function WritableState(options, stream) {
-	  Duplex = Duplex || __webpack_require__(10);
+	  Duplex = Duplex || __webpack_require__(8);
 	
 	  options = options || {};
 	
@@ -4942,7 +4993,7 @@ module.exports =
 	
 	var Duplex;
 	function Writable(options) {
-	  Duplex = Duplex || __webpack_require__(10);
+	  Duplex = Duplex || __webpack_require__(8);
 	
 	  // Writable ctor is applied to Duplexes, though they're not
 	  // instanceof Writable, they're instanceof Readable.
@@ -5282,46 +5333,50 @@ module.exports =
 	    }
 	  };
 	}
-	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(21), __webpack_require__(159).setImmediate))
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(29), __webpack_require__(159).setImmediate))
 
 /***/ }),
 /* 51 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	// optional / simple context binding
-	var aFunction = __webpack_require__(97);
-	module.exports = function(fn, that, length){
+	var aFunction = __webpack_require__(98);
+	module.exports = function (fn, that, length) {
 	  aFunction(fn);
-	  if(that === undefined)return fn;
-	  switch(length){
-	    case 1: return function(a){
+	  if (that === undefined) return fn;
+	  switch (length) {
+	    case 1: return function (a) {
 	      return fn.call(that, a);
 	    };
-	    case 2: return function(a, b){
+	    case 2: return function (a, b) {
 	      return fn.call(that, a, b);
 	    };
-	    case 3: return function(a, b, c){
+	    case 3: return function (a, b, c) {
 	      return fn.call(that, a, b, c);
 	    };
 	  }
-	  return function(/* ...args */){
+	  return function (/* ...args */) {
 	    return fn.apply(that, arguments);
 	  };
 	};
+
 
 /***/ }),
 /* 52 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	module.exports = __webpack_require__(4).document && document.documentElement;
+	var document = __webpack_require__(4).document;
+	module.exports = document && document.documentElement;
+
 
 /***/ }),
 /* 53 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	module.exports = !__webpack_require__(12) && !__webpack_require__(17)(function(){
-	  return Object.defineProperty(__webpack_require__(33)('div'), 'a', {get: function(){ return 7; }}).a != 7;
+	module.exports = !__webpack_require__(10) && !__webpack_require__(17)(function () {
+	  return Object.defineProperty(__webpack_require__(33)('div'), 'a', { get: function () { return 7; } }).a != 7;
 	});
+
 
 /***/ }),
 /* 54 */
@@ -5329,104 +5384,107 @@ module.exports =
 
 	// fallback for non-array-like ES3 and non-enumerable old V8 strings
 	var cof = __webpack_require__(31);
-	module.exports = Object('z').propertyIsEnumerable(0) ? Object : function(it){
+	// eslint-disable-next-line no-prototype-builtins
+	module.exports = Object('z').propertyIsEnumerable(0) ? Object : function (it) {
 	  return cof(it) == 'String' ? it.split('') : Object(it);
 	};
+
 
 /***/ }),
 /* 55 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	'use strict';
-	var LIBRARY        = __webpack_require__(36)
-	  , $export        = __webpack_require__(23)
-	  , redefine       = __webpack_require__(59)
-	  , hide           = __webpack_require__(13)
-	  , has            = __webpack_require__(7)
-	  , Iterators      = __webpack_require__(35)
-	  , $iterCreate    = __webpack_require__(103)
-	  , setToStringTag = __webpack_require__(38)
-	  , getPrototypeOf = __webpack_require__(111)
-	  , ITERATOR       = __webpack_require__(15)('iterator')
-	  , BUGGY          = !([].keys && 'next' in [].keys()) // Safari has buggy iterators w/o `next`
-	  , FF_ITERATOR    = '@@iterator'
-	  , KEYS           = 'keys'
-	  , VALUES         = 'values';
+	var LIBRARY = __webpack_require__(36);
+	var $export = __webpack_require__(22);
+	var redefine = __webpack_require__(59);
+	var hide = __webpack_require__(11);
+	var Iterators = __webpack_require__(35);
+	var $iterCreate = __webpack_require__(104);
+	var setToStringTag = __webpack_require__(38);
+	var getPrototypeOf = __webpack_require__(111);
+	var ITERATOR = __webpack_require__(14)('iterator');
+	var BUGGY = !([].keys && 'next' in [].keys()); // Safari has buggy iterators w/o `next`
+	var FF_ITERATOR = '@@iterator';
+	var KEYS = 'keys';
+	var VALUES = 'values';
 	
-	var returnThis = function(){ return this; };
+	var returnThis = function () { return this; };
 	
-	module.exports = function(Base, NAME, Constructor, next, DEFAULT, IS_SET, FORCED){
+	module.exports = function (Base, NAME, Constructor, next, DEFAULT, IS_SET, FORCED) {
 	  $iterCreate(Constructor, NAME, next);
-	  var getMethod = function(kind){
-	    if(!BUGGY && kind in proto)return proto[kind];
-	    switch(kind){
-	      case KEYS: return function keys(){ return new Constructor(this, kind); };
-	      case VALUES: return function values(){ return new Constructor(this, kind); };
-	    } return function entries(){ return new Constructor(this, kind); };
+	  var getMethod = function (kind) {
+	    if (!BUGGY && kind in proto) return proto[kind];
+	    switch (kind) {
+	      case KEYS: return function keys() { return new Constructor(this, kind); };
+	      case VALUES: return function values() { return new Constructor(this, kind); };
+	    } return function entries() { return new Constructor(this, kind); };
 	  };
-	  var TAG        = NAME + ' Iterator'
-	    , DEF_VALUES = DEFAULT == VALUES
-	    , VALUES_BUG = false
-	    , proto      = Base.prototype
-	    , $native    = proto[ITERATOR] || proto[FF_ITERATOR] || DEFAULT && proto[DEFAULT]
-	    , $default   = $native || getMethod(DEFAULT)
-	    , $entries   = DEFAULT ? !DEF_VALUES ? $default : getMethod('entries') : undefined
-	    , $anyNative = NAME == 'Array' ? proto.entries || $native : $native
-	    , methods, key, IteratorPrototype;
+	  var TAG = NAME + ' Iterator';
+	  var DEF_VALUES = DEFAULT == VALUES;
+	  var VALUES_BUG = false;
+	  var proto = Base.prototype;
+	  var $native = proto[ITERATOR] || proto[FF_ITERATOR] || DEFAULT && proto[DEFAULT];
+	  var $default = $native || getMethod(DEFAULT);
+	  var $entries = DEFAULT ? !DEF_VALUES ? $default : getMethod('entries') : undefined;
+	  var $anyNative = NAME == 'Array' ? proto.entries || $native : $native;
+	  var methods, key, IteratorPrototype;
 	  // Fix native
-	  if($anyNative){
-	    IteratorPrototype = getPrototypeOf($anyNative.call(new Base));
-	    if(IteratorPrototype !== Object.prototype){
+	  if ($anyNative) {
+	    IteratorPrototype = getPrototypeOf($anyNative.call(new Base()));
+	    if (IteratorPrototype !== Object.prototype && IteratorPrototype.next) {
 	      // Set @@toStringTag to native iterators
 	      setToStringTag(IteratorPrototype, TAG, true);
 	      // fix for some old engines
-	      if(!LIBRARY && !has(IteratorPrototype, ITERATOR))hide(IteratorPrototype, ITERATOR, returnThis);
+	      if (!LIBRARY && typeof IteratorPrototype[ITERATOR] != 'function') hide(IteratorPrototype, ITERATOR, returnThis);
 	    }
 	  }
 	  // fix Array#{values, @@iterator}.name in V8 / FF
-	  if(DEF_VALUES && $native && $native.name !== VALUES){
+	  if (DEF_VALUES && $native && $native.name !== VALUES) {
 	    VALUES_BUG = true;
-	    $default = function values(){ return $native.call(this); };
+	    $default = function values() { return $native.call(this); };
 	  }
 	  // Define iterator
-	  if((!LIBRARY || FORCED) && (BUGGY || VALUES_BUG || !proto[ITERATOR])){
+	  if ((!LIBRARY || FORCED) && (BUGGY || VALUES_BUG || !proto[ITERATOR])) {
 	    hide(proto, ITERATOR, $default);
 	  }
 	  // Plug for library
 	  Iterators[NAME] = $default;
-	  Iterators[TAG]  = returnThis;
-	  if(DEFAULT){
+	  Iterators[TAG] = returnThis;
+	  if (DEFAULT) {
 	    methods = {
-	      values:  DEF_VALUES ? $default : getMethod(VALUES),
-	      keys:    IS_SET     ? $default : getMethod(KEYS),
+	      values: DEF_VALUES ? $default : getMethod(VALUES),
+	      keys: IS_SET ? $default : getMethod(KEYS),
 	      entries: $entries
 	    };
-	    if(FORCED)for(key in methods){
-	      if(!(key in proto))redefine(proto, key, methods[key]);
+	    if (FORCED) for (key in methods) {
+	      if (!(key in proto)) redefine(proto, key, methods[key]);
 	    } else $export($export.P + $export.F * (BUGGY || VALUES_BUG), NAME, methods);
 	  }
 	  return methods;
 	};
+
 
 /***/ }),
 /* 56 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	// 19.1.2.2 / 15.2.3.5 Object.create(O [, Properties])
-	var anObject    = __webpack_require__(22)
-	  , dPs         = __webpack_require__(108)
-	  , enumBugKeys = __webpack_require__(34)
-	  , IE_PROTO    = __webpack_require__(39)('IE_PROTO')
-	  , Empty       = function(){ /* empty */ }
-	  , PROTOTYPE   = 'prototype';
+	var anObject = __webpack_require__(21);
+	var dPs = __webpack_require__(108);
+	var enumBugKeys = __webpack_require__(34);
+	var IE_PROTO = __webpack_require__(39)('IE_PROTO');
+	var Empty = function () { /* empty */ };
+	var PROTOTYPE = 'prototype';
 	
 	// Create object with fake `null` prototype: use iframe Object with cleared prototype
-	var createDict = function(){
+	var createDict = function () {
 	  // Thrash, waste and sodomy: IE GC bug
-	  var iframe = __webpack_require__(33)('iframe')
-	    , i      = enumBugKeys.length
-	    , gt     = '>'
-	    , iframeDocument;
+	  var iframe = __webpack_require__(33)('iframe');
+	  var i = enumBugKeys.length;
+	  var lt = '<';
+	  var gt = '>';
+	  var iframeDocument;
 	  iframe.style.display = 'none';
 	  __webpack_require__(52).appendChild(iframe);
 	  iframe.src = 'javascript:'; // eslint-disable-line no-script-url
@@ -5434,18 +5492,18 @@ module.exports =
 	  // html.removeChild(iframe);
 	  iframeDocument = iframe.contentWindow.document;
 	  iframeDocument.open();
-	  iframeDocument.write('<script>document.F=Object</script' + gt);
+	  iframeDocument.write(lt + 'script' + gt + 'document.F=Object' + lt + '/script' + gt);
 	  iframeDocument.close();
 	  createDict = iframeDocument.F;
-	  while(i--)delete createDict[PROTOTYPE][enumBugKeys[i]];
+	  while (i--) delete createDict[PROTOTYPE][enumBugKeys[i]];
 	  return createDict();
 	};
 	
-	module.exports = Object.create || function create(O, Properties){
+	module.exports = Object.create || function create(O, Properties) {
 	  var result;
-	  if(O !== null){
+	  if (O !== null) {
 	    Empty[PROTOTYPE] = anObject(O);
-	    result = new Empty;
+	    result = new Empty();
 	    Empty[PROTOTYPE] = null;
 	    // add "__proto__" for Object.getPrototypeOf polyfill
 	    result[IE_PROTO] = O;
@@ -5453,45 +5511,49 @@ module.exports =
 	  return Properties === undefined ? result : dPs(result, Properties);
 	};
 
+
 /***/ }),
 /* 57 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	// 19.1.2.7 / 15.2.3.4 Object.getOwnPropertyNames(O)
-	var $keys      = __webpack_require__(58)
-	  , hiddenKeys = __webpack_require__(34).concat('length', 'prototype');
+	var $keys = __webpack_require__(58);
+	var hiddenKeys = __webpack_require__(34).concat('length', 'prototype');
 	
-	exports.f = Object.getOwnPropertyNames || function getOwnPropertyNames(O){
+	exports.f = Object.getOwnPropertyNames || function getOwnPropertyNames(O) {
 	  return $keys(O, hiddenKeys);
 	};
+
 
 /***/ }),
 /* 58 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var has          = __webpack_require__(7)
-	  , toIObject    = __webpack_require__(8)
-	  , arrayIndexOf = __webpack_require__(99)(false)
-	  , IE_PROTO     = __webpack_require__(39)('IE_PROTO');
+	var has = __webpack_require__(7);
+	var toIObject = __webpack_require__(13);
+	var arrayIndexOf = __webpack_require__(100)(false);
+	var IE_PROTO = __webpack_require__(39)('IE_PROTO');
 	
-	module.exports = function(object, names){
-	  var O      = toIObject(object)
-	    , i      = 0
-	    , result = []
-	    , key;
-	  for(key in O)if(key != IE_PROTO)has(O, key) && result.push(key);
+	module.exports = function (object, names) {
+	  var O = toIObject(object);
+	  var i = 0;
+	  var result = [];
+	  var key;
+	  for (key in O) if (key != IE_PROTO) has(O, key) && result.push(key);
 	  // Don't enum bug & hidden keys
-	  while(names.length > i)if(has(O, key = names[i++])){
+	  while (names.length > i) if (has(O, key = names[i++])) {
 	    ~arrayIndexOf(result, key) || result.push(key);
 	  }
 	  return result;
 	};
 
+
 /***/ }),
 /* 59 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	module.exports = __webpack_require__(13);
+	module.exports = __webpack_require__(11);
+
 
 /***/ }),
 /* 60 */
@@ -5499,9 +5561,10 @@ module.exports =
 
 	// 7.1.13 ToObject(argument)
 	var defined = __webpack_require__(32);
-	module.exports = function(it){
+	module.exports = function (it) {
 	  return Object(defined(it));
 	};
+
 
 /***/ }),
 /* 61 */
@@ -5764,7 +5827,7 @@ module.exports =
 	        this.checkIndex(this.index + offset);
 	    },
 	    /**
-	     * Check that the specifed index will not be too far.
+	     * Check that the specified index will not be too far.
 	     * @param {string} newIndex the index to check.
 	     * @throws {Error} an Error if the index is out of bounds.
 	     */
@@ -5923,8 +5986,6 @@ module.exports =
 	    }
 	    return new ArrayReader(utils.transformTo("array", data));
 	};
-	
-	// vim: set shiftwidth=4 softtabstop=4:
 
 
 /***/ }),
@@ -6151,24 +6212,19 @@ module.exports =
 	 * Apply the final transformation of the data. If the user wants a Blob for
 	 * example, it's easier to work with an U8intArray and finally do the
 	 * ArrayBuffer/Blob conversion.
-	 * @param {String} resultType the name of the final type
-	 * @param {String} chunkType the type of the data in the given array.
-	 * @param {Array} dataArray the array containing the data chunks to concatenate
+	 * @param {String} type the name of the final type
 	 * @param {String|Uint8Array|Buffer} content the content to transform
 	 * @param {String} mimeType the mime type of the content, if applicable.
 	 * @return {String|Uint8Array|ArrayBuffer|Buffer|Blob} the content in the right format.
 	 */
-	function transformZipOutput(resultType, chunkType, dataArray, mimeType) {
-	    var content = null;
-	    switch(resultType) {
+	function transformZipOutput(type, content, mimeType) {
+	    switch(type) {
 	        case "blob" :
-	            return utils.newBlob(dataArray, mimeType);
+	            return utils.newBlob(utils.transformTo("arraybuffer", content), mimeType);
 	        case "base64" :
-	            content = concat(chunkType, dataArray);
 	            return base64.encode(content);
 	        default :
-	            content = concat(chunkType, dataArray);
-	            return utils.transformTo(resultType, content);
+	            return utils.transformTo(type, content);
 	    }
 	}
 	
@@ -6231,7 +6287,7 @@ module.exports =
 	        })
 	        .on('end', function (){
 	            try {
-	                var result = transformZipOutput(resultType, chunkType, dataArray, mimeType);
+	                var result = transformZipOutput(resultType, concat(chunkType, dataArray), mimeType);
 	                resolve(result);
 	            } catch (e) {
 	                reject(e);
@@ -6253,8 +6309,6 @@ module.exports =
 	    var internalType = outputType;
 	    switch(outputType) {
 	        case "blob":
-	            internalType = "arraybuffer";
-	        break;
 	        case "arraybuffer":
 	            internalType = "uint8array";
 	        break;
@@ -6367,7 +6421,7 @@ module.exports =
 	// Quick check if we can use fast array to bin string conversion
 	//
 	// - apply(Array) can fail on Android 2.2
-	// - apply(Uint8Array) can fail on iOS 5.1 Safary
+	// - apply(Uint8Array) can fail on iOS 5.1 Safari
 	//
 	var STR_APPLY_OK = true;
 	var STR_APPLY_UIA_OK = true;
@@ -6532,11 +6586,11 @@ module.exports =
 	  pos = max - 1;
 	  while (pos >= 0 && (buf[pos] & 0xC0) === 0x80) { pos--; }
 	
-	  // Fuckup - very small and broken sequence,
+	  // Very small and broken sequence,
 	  // return max, because we should return something anyway.
 	  if (pos < 0) { return max; }
 	
-	  // If we came to start of buffer - that means vuffer is too small,
+	  // If we came to start of buffer - that means buffer is too small,
 	  // return max too.
 	  if (pos === 0) { return max; }
 	
@@ -6551,7 +6605,7 @@ module.exports =
 	'use strict';
 	
 	// Note: adler32 takes 12% for level 0 and 2% for level 6.
-	// It doesn't worth to make additional optimizationa as in original.
+	// It isn't worth it to make additional optimizations as in original.
 	// Small size is preferable.
 	
 	// (C) 1995-2013 Jean-loup Gailly and Mark Adler
@@ -6809,7 +6863,7 @@ module.exports =
 	
 	/*<replacement>*/
 	var util = __webpack_require__(19);
-	util.inherits = __webpack_require__(9);
+	util.inherits = __webpack_require__(15);
 	/*</replacement>*/
 	
 	util.inherits(PassThrough, Transform);
@@ -6846,7 +6900,7 @@ module.exports =
 	
 	Readable.ReadableState = ReadableState;
 	
-	var EE = __webpack_require__(28);
+	var EE = __webpack_require__(27);
 	
 	/*<replacement>*/
 	var EElistenerCount = function (emitter, type) {
@@ -6860,7 +6914,7 @@ module.exports =
 	  try {
 	    Stream = __webpack_require__(30);
 	  } catch (_) {} finally {
-	    if (!Stream) Stream = __webpack_require__(28).EventEmitter;
+	    if (!Stream) Stream = __webpack_require__(27).EventEmitter;
 	  }
 	})();
 	/*</replacement>*/
@@ -6869,11 +6923,11 @@ module.exports =
 	
 	/*<replacement>*/
 	var util = __webpack_require__(19);
-	util.inherits = __webpack_require__(9);
+	util.inherits = __webpack_require__(15);
 	/*</replacement>*/
 	
 	/*<replacement>*/
-	var debugUtil = __webpack_require__(170);
+	var debugUtil = __webpack_require__(168);
 	var debug = undefined;
 	if (debugUtil && debugUtil.debuglog) {
 	  debug = debugUtil.debuglog('stream');
@@ -6888,7 +6942,7 @@ module.exports =
 	
 	var Duplex;
 	function ReadableState(options, stream) {
-	  Duplex = Duplex || __webpack_require__(10);
+	  Duplex = Duplex || __webpack_require__(8);
 	
 	  options = options || {};
 	
@@ -6955,7 +7009,7 @@ module.exports =
 	
 	var Duplex;
 	function Readable(options) {
-	  Duplex = Duplex || __webpack_require__(10);
+	  Duplex = Duplex || __webpack_require__(8);
 	
 	  if (!(this instanceof Readable)) return new Readable(options);
 	
@@ -7708,7 +7762,7 @@ module.exports =
 	  }
 	  return -1;
 	}
-	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(21)))
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(29)))
 
 /***/ }),
 /* 82 */
@@ -8001,22 +8055,22 @@ module.exports =
 	'use strict';
 	
 	Object.defineProperty(exports, "__esModule", {
-	    value: true
+		value: true
 	});
 	
-	var _stringify = __webpack_require__(86);
+	var _stringify = __webpack_require__(87);
 	
 	var _stringify2 = _interopRequireDefault(_stringify);
 	
-	var _assign = __webpack_require__(87);
+	var _assign = __webpack_require__(88);
 	
 	var _assign2 = _interopRequireDefault(_assign);
 	
-	var _typeof2 = __webpack_require__(90);
+	var _typeof2 = __webpack_require__(91);
 	
 	var _typeof3 = _interopRequireDefault(_typeof2);
 	
-	var _InputFile = __webpack_require__(164);
+	var _InputFile = __webpack_require__(162);
 	
 	var _InputFile2 = _interopRequireDefault(_InputFile);
 	
@@ -8024,700 +8078,713 @@ module.exports =
 	
 	var _jszip2 = _interopRequireDefault(_jszip);
 	
+	var _debounce = __webpack_require__(86);
+	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 	
 	exports.default = {
-	    components: {
-	        InputFile: _InputFile2.default
-	    },
+		components: {
+			InputFile: _InputFile2.default
+		},
 	
-	    props: {
-	        title: {
-	            type: String,
-	            default: 'Upload file'
-	        },
-	        name: {
-	            type: String,
-	            default: 'file'
-	        },
-	        drop: {
-	            default: false
-	        },
-	        extensions: {
-	            default: function _default() {
-	                return [];
-	            }
-	        },
-	        postAction: {
-	            type: String
-	        },
-	        putAction: {
-	            type: String
-	        },
-	        accept: {
-	            type: String
-	        },
-	        multiple: {
-	            type: Boolean
-	        },
-	        timeout: {
-	            type: Number,
-	            default: 0
-	        },
-	        size: {
-	            type: Number
-	        },
-	        events: {
-	            type: Object,
-	            default: function _default() {}
-	        },
+		props: {
+			title: {
+				type: String,
+				default: 'Upload file'
+			},
+			name: {
+				type: String,
+				default: 'file'
+			},
+			drop: {
+				default: false
+			},
+			extensions: {
+				default: function _default() {
+					return [];
+				}
+			},
+			postAction: {
+				type: String
+			},
+			putAction: {
+				type: String
+			},
+			accept: {
+				type: String
+			},
+			multiple: {
+				type: Boolean
+			},
+			timeout: {
+				type: Number,
+				default: 0
+			},
+			size: {
+				type: Number
+			},
+			events: {
+				type: Object,
+				default: function _default() {}
+			},
 	
-	        headers: {
-	            type: Object,
-	            default: function _default() {}
-	        },
-	        data: {
-	            type: Object,
-	            default: function _default() {}
-	        },
-	        files: {
-	            type: Array,
-	            default: function _default() {
-	                return [];
-	            }
-	        },
-	        thread: {
-	            type: Number,
-	            default: 1
-	        },
+			headers: {
+				type: Object,
+				default: function _default() {}
+			},
+			data: {
+				type: Object,
+				default: function _default() {}
+			},
+			files: {
+				type: Array,
+				default: function _default() {
+					return [];
+				}
+			},
+			thread: {
+				type: Number,
+				default: 1
+			},
 	
-	        zip: {
-	            type: Boolean,
-	            default: false
-	        },
-	        zipCompressionLevel: {
-	            type: Number,
-	            default: 9
-	        }
-	    },
+			zip: {
+				type: Boolean,
+				default: false
+			},
+			zipCompressionLevel: {
+				type: Number,
+				default: 9
+			}
+		},
 	
-	    data: function data() {
-	        return {
-	            mode: 'html5',
-	            active: false,
-	            uploading: 0,
-	            uploaded: true,
-	            destroy: false,
-	            dropActive: false
-	        };
-	    },
-	    mounted: function mounted() {
-	        var _this = this;
+		data: function data() {
+			return {
+				mode: 'html5',
+				active: false,
+				uploading: 0,
+				uploaded: true,
+				destroy: false,
+				dropActive: false
+			};
+		},
+		mounted: function mounted() {
+			var _this = this;
 	
-	        var input = document.createElement('input');
-	        input.type = 'file';
-	        if (window.FormData && input.files) {
-	            this.mode = 'html5';
-	        } else {
-	            this.mode = 'html4';
-	        }
-	        this._index = 0;
-	        this._files = [];
-	        this._dropActive = 0;
-	        this._drop(this.drop);
-	        this.$nextTick(function () {
-	            _this._drop(_this.drop);
-	        });
-	    },
-	    beforeDestroy: function beforeDestroy() {
-	        this.active = false;
-	        this.destroy = true;
-	        this.files.splice(0, this.files.length);
-	    },
+			var input = document.createElement('input');
+			input.type = 'file';
+			if (window.FormData && input.files) {
+				this.mode = 'html5';
+			} else {
+				this.mode = 'html4';
+			}
+			this._index = 0;
+			this._files = [];
+			this._dropActive = 0;
+			this._drop(this.drop);
+			this.$nextTick(function () {
+				_this._drop(_this.drop);
+			});
+		},
+		beforeDestroy: function beforeDestroy() {
+			this.active = false;
+			this.destroy = true;
+			this.files.splice(0, this.files.length);
+		},
 	
 	
-	    watch: {
-	        drop: function drop(value) {
-	            this._drop(value);
-	        },
-	        files: function files(_files) {
-	            var diffCount = 0;
-	            var fileMaps = {};
+		watch: {
+			drop: function drop(value) {
+				this._drop(value);
+			},
+			files: function files(_files) {
+				var diffCount = 0;
+				var fileMaps = {};
 	
-	            for (var i = 0; i < _files.length; i++) {
-	                var file = _files[i];
+				for (var i = 0; i < _files.length; i++) {
+					var file = _files[i];
 	
-	                if (!file.error && !file.success) {
-	                    this.uploaded = false;
-	                }
+					if (!file.error && !file.success) {
+						this.uploaded = false;
+					}
 	
-	                if (!this._files[file.id]) {
-	                    diffCount++;
-	                    this._files[file.id] = file;
-	                    this._uploadEvents('add', file);
-	                }
+					if (!this._files[file.id]) {
+						diffCount++;
+						this._files[file.id] = file;
+						this._uploadEvents('add', file);
+					}
 	
-	                fileMaps[file.id] = true;
-	            }
+					fileMaps[file.id] = true;
+				}
 	
-	            for (var id in this._files) {
-	                if (fileMaps[id]) {
-	                    continue;
-	                }
-	                diffCount++;
-	                var _file = this._files[id];
+				for (var id in this._files) {
+					if (fileMaps[id]) {
+						continue;
+					}
+					diffCount++;
+					var _file = this._files[id];
 	
-	                _file.removed = true;
+					_file.removed = true;
 	
-	                var xhr = _file.xhr;
-	                if (xhr) {
-	                    try {
-	                        xhr.abort();
-	                        xhr.timeout = 1;
-	                    } catch (e) {}
-	                }
+					var xhr = _file.xhr;
+					if (xhr) {
+						try {
+							xhr.abort();
+							xhr.timeout = 1;
+						} catch (e) {}
+					}
 	
-	                if (_file.iframe) {
-	                    _file.iframe.onabort({ type: 'abort' });
-	                }
-	                delete this._files[id];
-	                this._uploadEvents('remove', _file);
-	            }
-	            if (diffCount) {
-	                this._index = 0;
-	            }
-	        },
-	        active: function active(newValue, oldValue) {
-	            if (newValue && !oldValue) {
-	                for (var i = 0; i < this.thread; i++) {
-	                    this._fileUploads();
-	                    if (this.mode != 'html5') {
-	                        break;
-	                    }
-	                }
-	            }
-	        },
-	        uploaded: function uploaded(_uploaded) {
-	            if (_uploaded) {
-	                this.active = false;
-	            }
-	        }
-	    },
+					if (_file.iframe) {
+						_file.iframe.onabort({ type: 'abort' });
+					}
+					delete this._files[id];
+					this._uploadEvents('remove', _file);
+				}
+				if (diffCount) {
+					this._index = 0;
+				}
+			},
+			active: function active(newValue, oldValue) {
+				if (newValue && !oldValue) {
+					for (var i = 0; i < this.thread; i++) {
+						this._fileUploads();
+						if (this.mode != 'html5') {
+							break;
+						}
+					}
+				}
+			},
+			uploaded: function uploaded(_uploaded) {
+				if (_uploaded) {
+					this.active = false;
+				}
+			}
+		},
 	
-	    methods: {
-	        clear: function clear() {
-	            if (this.files.length) {
-	                this.files.splice(0, this.files.length);
-	            }
-	        },
-	        select: function select(file) {
-	            if ((typeof file === 'undefined' ? 'undefined' : (0, _typeof3.default)(file)) == 'object') {
-	                var index = this.files.indexOf(file);
-	                if (index == -1) {
-	                    return false;
-	                }
-	                return file;
-	            }
-	            var id = file;
-	            for (var i = 0; i < this.files.length; i++) {
-	                file = this.files[i];
-	                if (file.id == id) {
-	                    return file;
-	                }
-	            }
-	            return false;
-	        },
-	        remove: function remove(file) {
-	            file = this.select(file);
-	            if (file) {
-	                this.files.splice(this.files.indexOf(file), 1);
-	            }
-	            return file;
-	        },
-	        abort: function abort(file) {
-	            file = this.select(file);
-	            if (file) {
-	                file.active = false;
-	            }
-	            return file;
-	        },
-	        addFileUpload: function addFileUpload(file) {
-	            var onFileReadyToUpload = function (file) {
-	                this.uploaded = false;
-	                var defaultFile = {
-	                    size: -1,
-	                    name: 'Filename',
-	                    progress: '0.00',
-	                    speed: 0,
-	                    active: false,
-	                    error: '',
-	                    success: false,
-	                    removed: false,
-	                    putAction: this.putAction,
-	                    postAction: this.postAction,
-	                    timeout: this.timeout,
-	                    data: (0, _assign2.default)({}, this.data),
-	                    headers: (0, _assign2.default)({}, this.headers),
-	                    response: {},
-	                    xhr: false,
-	                    iframe: false
-	                };
+		methods: {
+			clear: function clear() {
+				if (this.files.length) {
+					this.files.splice(0, this.files.length);
+				}
+			},
+			select: function select(file) {
+				if ((typeof file === 'undefined' ? 'undefined' : (0, _typeof3.default)(file)) == 'object') {
+					var index = this.files.indexOf(file);
+					if (index == -1) {
+						return false;
+					}
+					return file;
+				}
+				var id = file;
+				for (var i = 0; i < this.files.length; i++) {
+					file = this.files[i];
+					if (file.id == id) {
+						return file;
+					}
+				}
+				return false;
+			},
+			remove: function remove(file) {
+				file = this.select(file);
+				if (file) {
+					this.files.splice(this.files.indexOf(file), 1);
+				}
+				return file;
+			},
+			abort: function abort(file) {
+				file = this.select(file);
+				if (file) {
+					file.active = false;
+				}
+				return file;
+			},
+			addFileUpload: function addFileUpload(file) {
+				var onFileReadyToUpload = function (file) {
+					this.uploaded = false;
+					var defaultFile = {
+						size: -1,
+						name: 'Filename',
+						progress: '0.00',
+						speed: 0,
+						active: false,
+						error: '',
+						success: false,
+						removed: false,
+						putAction: this.putAction,
+						postAction: this.postAction,
+						timeout: this.timeout,
+						data: (0, _assign2.default)({}, this.data),
+						headers: (0, _assign2.default)({}, this.headers),
+						response: {},
+						xhr: false,
+						iframe: false
+					};
 	
-	                file = (0, _assign2.default)(defaultFile, file);
+					file = (0, _assign2.default)(defaultFile, file);
 	
-	                if (!file.id) {
-	                    file.id = Math.random().toString(36).substr(2);
-	                }
+					if (!file.id) {
+						file.id = Math.random().toString(36).substr(2);
+					}
 	
-	                if (!this.multiple) {
-	                    this.clear();
-	                }
-	                var index = this.files.push(file);
-	            }.bind(this);
+					if (!this.multiple) {
+						this.clear();
+					}
+					var index = this.files.push(file);
+				}.bind(this);
 	
-	            var self = this;
-	            if (file['file'] && self.zip && _jszip2.default.support.arraybuffer) {
-	                var zip = new _jszip2.default();
-	                var reader = new FileReader();
-	                reader.onload = function (e) {
-	                    var zip = new _jszip2.default();
-	                    zip.file(file.name, reader.result);
-	                    zip.generateAsync({ type: "blob", compression: 'DEFLATE', compressionOptions: { level: self.zipCompressionLevel } }).then(function (blobData) {
-	                        file['blob'] = blobData;
-	                        onFileReadyToUpload(file);
-	                    });
-	                };
-	                reader.onerror = function (e) {
-	                    console.log('file read error', e);
-	                };
-	                reader.readAsArrayBuffer(file['file']);
-	            } else {
-	                onFileReadyToUpload(file);
-	            }
-	        },
-	        _uploadEvents: function _uploadEvents(name, file) {
-	            this.events && this.events[name] && this.events[name].call(this, file, this);
-	        },
-	        _drop: function _drop(value) {
-	            if (this.dropElement && this.mode === 'html5') {
-	                try {
-	                    window.document.removeEventListener('dragenter', this._onDragenter, false);
-	                    window.document.removeEventListener('dragleave', this._onDragleave, false);
-	                    this.dropElement.removeEventListener('dragover', this._onDragover, false);
-	                    this.dropElement.removeEventListener('drop', this._onDrop, false);
-	                } catch (e) {}
-	            }
+				var self = this;
+				if (file['file'] && self.zip && _jszip2.default.support.arraybuffer) {
+					var zip = new _jszip2.default();
+					var reader = new FileReader();
+					reader.onload = function (e) {
+						var zip = new _jszip2.default();
+						zip.file(file.name, reader.result);
+						zip.generateAsync({
+							type: "blob",
+							compression: 'DEFLATE',
+							compressionOptions: { level: self.zipCompressionLevel }
+						}).then(function (blobData) {
+							file['blob'] = blobData;
+							onFileReadyToUpload(file);
+						});
+					};
+					reader.onerror = function (e) {
+						console.log('file read error', e);
+					};
+					reader.readAsArrayBuffer(file['file']);
+				} else {
+					onFileReadyToUpload(file);
+				}
+			},
+			_uploadEvents: function _uploadEvents(name, file) {
+				this.events && this.events[name] && this.events[name].call(this, file, this);
+			},
+			_drop: function _drop(value) {
+				if (this.dropElement && this.mode === 'html5') {
+					try {
+						window.document.removeEventListener('dragenter', this._onDragenter, false);
+						window.document.removeEventListener('dragleave', this._onDragleave, false);
+						this.dropElement.removeEventListener('dragover', this._onDragover, false);
+						this.dropElement.removeEventListener('drop', this._onDrop, false);
+					} catch (e) {}
+				}
 	
-	            if (!value) {
-	                this.dropElement = false;
-	                return;
-	            }
+				if (!value) {
+					this.dropElement = false;
+					return;
+				}
 	
-	            if (typeof value == 'string') {
-	                this.dropElement = document.querySelector(value) || this.$root.$el.querySelector(value);
-	            } else if (typeof value == 'boolean') {
-	                this.dropElement = this.$parent.$el;
-	            } else {
-	                this.dropElement = this.drop;
-	            }
+				if (typeof value == 'string') {
+					this.dropElement = document.querySelector(value) || this.$root.$el.querySelector(value);
+				} else if (typeof value == 'boolean') {
+					this.dropElement = this.$parent.$el;
+				} else {
+					this.dropElement = this.drop;
+				}
 	
-	            if (this.dropElement && this.mode === 'html5') {
-	                window.document.addEventListener('dragenter', this._onDragenter, false);
-	                window.document.addEventListener('dragleave', this._onDragleave, false);
-	                this.dropElement.addEventListener('dragover', this._onDragover, false);
-	                this.dropElement.addEventListener('drop', this._onDrop, false);
-	            }
-	        },
-	        _onDragenter: function _onDragenter(e) {
-	            this._dropActive++;
-	            this.dropActive = !!this._dropActive;
-	            e.preventDefault();
-	        },
-	        _onDragleave: function _onDragleave(e) {
-	            e.preventDefault();
-	            this._dropActive--;
-	            if (e.target.nodeName == 'HTML' || e.target.nodeName == 'DIV' || e.clientX <= 0 || e.clientX >= window.innerWidth || e.clientY <= 0 || e.clientY >= window.innerHeight) {
-	                this.dropActive = !!this._dropActive;
-	            }
-	        },
-	        _onDragover: function _onDragover(e) {
-	            e.preventDefault();
-	        },
-	        _onDrop: function _onDrop(e) {
-	            this._dropActive = 0;
-	            this.dropActive = false;
-	            e.preventDefault();
-	            if (e.dataTransfer.files.length) {
-	                for (var i = 0; i < e.dataTransfer.files.length; i++) {
-	                    var file = e.dataTransfer.files[i];
-	                    this.addFileUpload({ file: file, size: file.size, name: file.name });
-	                    if (!this.multiple) {
-	                        break;
-	                    }
-	                }
-	            }
-	        },
-	        _addInputFileElement: function _addInputFileElement(el) {
-	            if (el.files) {
-	                for (var i = 0; i < el.files.length; i++) {
-	                    var file = el.files[i];
-	                    this.addFileUpload({ size: file.size, name: file.name, file: file, el: el });
-	                }
-	            } else {
-	                this.addFileUpload({ name: el.value.replace(/^.*?([^\/\\\r\n]+)$/, '$1'), el: el });
-	            }
+				if (this.dropElement && this.mode === 'html5') {
+					window.document.addEventListener('dragenter', this._onDragenter, false);
+					window.document.addEventListener('dragleave', this._onDragleave, false);
+					this.dropElement.addEventListener('dragover', this._onDragover, false);
+					this.dropElement.addEventListener('drop', this._onDrop, false);
+				}
+			},
 	
-	            var Component = this.$options.components.InputFile;
+			debouncedResetDragActive: (0, _debounce.debounce)(function () {
+				console.log('debounced');
+				this._dropActive = 0;
+				this.dropActive = !!this._dropActive;
+			}, 6000),
+			_onDragenter: function _onDragenter(e) {
+				this._dropActive++;
+				this.dropActive = !!this._dropActive;
+				this.debouncedResetDragActive();
+				e.preventDefault();
+			},
+			_onDragleave: function _onDragleave(e) {
+				e.preventDefault();
+				this._dropActive--;
+				if (e.target.nodeName == 'HTML' || e.target.nodeName == 'DIV' || e.clientX <= 0 || e.clientX >= window.innerWidth || e.clientY <= 0 || e.clientY >= window.innerHeight) {
+					this.dropActive = !!this._dropActive;
+				}
+			},
+			_onDragover: function _onDragover(e) {
+				e.preventDefault();
+			},
+			_onDrop: function _onDrop(e) {
+				this._dropActive = 0;
+				this.dropActive = false;
+				e.preventDefault();
+				if (e.dataTransfer.files.length) {
+					for (var i = 0; i < e.dataTransfer.files.length; i++) {
+						var file = e.dataTransfer.files[i];
+						this.addFileUpload({ file: file, size: file.size, name: file.name });
+						if (!this.multiple) {
+							break;
+						}
+					}
+				}
+			},
+			_addInputFileElement: function _addInputFileElement(el) {
+				if (el.files) {
+					for (var i = 0; i < el.files.length; i++) {
+						var file = el.files[i];
+						this.addFileUpload({ size: file.size, name: file.name, file: file, el: el });
+					}
+				} else {
+					this.addFileUpload({ name: el.value.replace(/^.*?([^\/\\\r\n]+)$/, '$1'), el: el });
+				}
 	
-	            if (!Component._Ctor) {} else if (typeof Component._Ctor == 'function') {
-	                Component = Component._Ctor;
-	            } else {
-	                Component = Component._Ctor[0];
-	            }
+				var Component = this.$options.components.InputFile;
 	
-	            var inputFile = new Component({
-	                parent: this,
-	                el: el.parentNode
-	            });
-	        },
-	        _fileUploads: function _fileUploads() {
-	            if (this.uploading > 0) {
-	                this.uploading--;
-	            }
-	            if (!this.active) {
-	                return;
-	            }
+				if (!Component._Ctor) {} else if (typeof Component._Ctor == 'function') {
+					Component = Component._Ctor;
+				} else {
+					Component = Component._Ctor[0];
+				}
 	
-	            for (; this._index < this.files.length; this._index++) {
-	                var file = this.files[this._index];
-	                if (file.active || file.success || file.error) {
-	                    continue;
-	                }
+				var inputFile = new Component({
+					parent: this,
+					el: el.parentNode
+				});
+			},
+			_fileUploads: function _fileUploads() {
+				if (this.uploading > 0) {
+					this.uploading--;
+				}
+				if (!this.active) {
+					return;
+				}
 	
-	                if (this.size && this.size > 0 && file.size >= 0 && file.size > this.size) {
-	                    file.error = 'size';
-	                    continue;
-	                }
+				for (; this._index < this.files.length; this._index++) {
+					var file = this.files[this._index];
+					if (file.active || file.success || file.error) {
+						continue;
+					}
 	
-	                if (this.extensions && (this.extensions.length || typeof this.extensions.length == 'undefined')) {
-	                    var extensions = this.extensions;
-	                    if ((typeof extensions === 'undefined' ? 'undefined' : (0, _typeof3.default)(extensions)) == 'object' && extensions instanceof RegExp) {} else {
-	                        if (typeof extensions == 'string') {
-	                            extensions = extensions.split(',').map(function (value) {
-	                                return value.trim();
-	                            }).filter(function (value) {
-	                                return value;
-	                            });
-	                        }
-	                        extensions = new RegExp('\\.(' + extensions.join('|').replace(/\./g, '\\.') + ')$', 'i');
-	                    }
+					if (this.size && this.size > 0 && file.size >= 0 && file.size > this.size) {
+						file.error = 'size';
+						continue;
+					}
 	
-	                    if (file.name.search(extensions) == -1) {
-	                        file.error = 'extension';
-	                        continue;
-	                    }
-	                }
+					if (this.extensions && (this.extensions.length || typeof this.extensions.length == 'undefined')) {
+						var extensions = this.extensions;
+						if ((typeof extensions === 'undefined' ? 'undefined' : (0, _typeof3.default)(extensions)) == 'object' && extensions instanceof RegExp) {} else {
+							if (typeof extensions == 'string') {
+								extensions = extensions.split(',').map(function (value) {
+									return value.trim();
+								}).filter(function (value) {
+									return value;
+								});
+							}
+							extensions = new RegExp('\\.(' + extensions.join('|').replace(/\./g, '\\.') + ')$', 'i');
+						}
 	
-	                if (this.mode == 'html5') {
-	                    if (file.putAction) {
-	                        this._fileUploadPut(file);
-	                    } else if (file.postAction) {
-	                        this._fileUploadHtml5(file);
-	                    } else {
-	                        file.error = 'not_support';
-	                        continue;
-	                    }
-	                } else {
-	                    console.log('in mode html4');
-	                    if (file.postAction) {
-	                        this._fileUploadHtml4(file);
-	                    } else {
-	                        file.error = 'not_support';
-	                        continue;
-	                    }
-	                }
+						if (file.name.search(extensions) == -1) {
+							file.error = 'extension';
+							continue;
+						}
+					}
 	
-	                this.uploading++;
-	                return;
-	            }
+					if (this.mode == 'html5') {
+						if (file.putAction) {
+							this._fileUploadPut(file);
+						} else if (file.postAction) {
+							this._fileUploadHtml5(file);
+						} else {
+							file.error = 'not_support';
+							continue;
+						}
+					} else {
+						console.log('in mode html4');
+						if (file.postAction) {
+							this._fileUploadHtml4(file);
+						} else {
+							file.error = 'not_support';
+							continue;
+						}
+					}
 	
-	            if (!this.uploading) {
-	                this.active = false;
-	                this.uploaded = true;
-	            }
-	        },
-	        _fileUploadXhr: function _fileUploadXhr(xhr, file, data) {
-	            var _self = this;
-	            var complete = false;
+					this.uploading++;
+					return;
+				}
 	
-	            var speedTime = 0;
-	            var speedLoaded = 0;
-	            xhr.upload.onprogress = function (e) {
-	                if (file.removed) {
-	                    xhr.abort();
-	                    return;
-	                }
+				if (!this.uploading) {
+					this.active = false;
+					this.uploaded = true;
+				}
+			},
+			_fileUploadXhr: function _fileUploadXhr(xhr, file, data) {
+				var _self = this;
+				var complete = false;
 	
-	                if (!_self.active || !file.active) {
-	                    xhr.abort();
-	                    return;
-	                }
+				var speedTime = 0;
+				var speedLoaded = 0;
+				xhr.upload.onprogress = function (e) {
+					if (file.removed) {
+						xhr.abort();
+						return;
+					}
 	
-	                if (e.lengthComputable) {
-	                    file.progress = (e.loaded / e.total * 100).toFixed(2);
-	                    var speedTime2 = Math.round(Date.now() / 1000);
-	                    if (speedTime2 != speedTime) {
-	                        file.speed = e.loaded - speedLoaded;
-	                        speedLoaded = e.loaded;
-	                        speedTime = speedTime2;
-	                    }
-	                }
-	                _self._uploadEvents('progress', file);
-	            };
+					if (!_self.active || !file.active) {
+						xhr.abort();
+						return;
+					}
 	
-	            var callback = function callback(e) {
-	                switch (e.type) {
-	                    case 'timeout':
-	                        file.error = 'timeout';
-	                        break;
-	                    case 'abort':
-	                        file.error = 'abort';
-	                        break;
-	                    case 'error':
-	                        if (!xhr.status) {
-	                            file.error = 'network';
-	                        } else if (xhr.status >= 500) {
-	                            file.error = 'server';
-	                        } else if (xhr.status >= 400) {
-	                            file.error = 'denied';
-	                        }
-	                        break;
-	                    default:
-	                        if (xhr.status >= 500) {
-	                            file.error = 'server';
-	                        } else if (xhr.status >= 400) {
-	                            file.error = 'denied';
-	                        } else {
-	                            file.progress = '100.00';
-	                            file.success = true;
-	                        }
-	                }
-	                file.active = false;
-	                if (xhr.responseText) {
-	                    var contentType = xhr.getResponseHeader('Content-Type');
-	                    if (contentType && contentType.indexOf('/json') != -1) {
-	                        file.response = JSON.parse(xhr.responseText);
-	                    } else {
-	                        file.response = xhr.responseText;
-	                    }
-	                }
+					if (e.lengthComputable) {
+						file.progress = (e.loaded / e.total * 100).toFixed(2);
+						var speedTime2 = Math.round(Date.now() / 1000);
+						if (speedTime2 != speedTime) {
+							file.speed = e.loaded - speedLoaded;
+							speedLoaded = e.loaded;
+							speedTime = speedTime2;
+						}
+					}
+					_self._uploadEvents('progress', file);
+				};
 	
-	                if (!complete) {
-	                    complete = true;
-	                    if (!file.removed) {
-	                        _self._uploadEvents('after', file);
-	                    }
-	                    setTimeout(function () {
-	                        _self._fileUploads();
-	                    }, 50);
-	                }
-	            };
+				var callback = function callback(e) {
+					switch (e.type) {
+						case 'timeout':
+							file.error = 'timeout';
+							break;
+						case 'abort':
+							file.error = 'abort';
+							break;
+						case 'error':
+							if (!xhr.status) {
+								file.error = 'network';
+							} else if (xhr.status >= 500) {
+								file.error = 'server';
+							} else if (xhr.status >= 400) {
+								file.error = 'denied';
+							}
+							break;
+						default:
+							if (xhr.status >= 500) {
+								file.error = 'server';
+							} else if (xhr.status >= 400) {
+								file.error = 'denied';
+							} else {
+								file.progress = '100.00';
+								file.success = true;
+							}
+					}
+					file.active = false;
+					if (xhr.responseText) {
+						var contentType = xhr.getResponseHeader('Content-Type');
+						if (contentType && contentType.indexOf('/json') != -1) {
+							file.response = JSON.parse(xhr.responseText);
+						} else {
+							file.response = xhr.responseText;
+						}
+					}
 	
-	            xhr.onload = callback;
-	            xhr.onerror = callback;
-	            xhr.onabort = callback;
-	            xhr.ontimeout = callback;
+					if (!complete) {
+						complete = true;
+						if (!file.removed) {
+							_self._uploadEvents('after', file);
+						}
+						setTimeout(function () {
+							_self._fileUploads();
+						}, 50);
+					}
+				};
 	
-	            if (file.timeout) {
-	                xhr.timeout = file.timeout;
-	            }
+				xhr.onload = callback;
+				xhr.onerror = callback;
+				xhr.onabort = callback;
+				xhr.ontimeout = callback;
 	
-	            for (var key in file.headers) {
-	                xhr.setRequestHeader(key, file.headers[key]);
-	            }
+				if (file.timeout) {
+					xhr.timeout = file.timeout;
+				}
 	
-	            xhr.send(data);
-	            file.active = true;
-	            file.xhr = xhr;
+				for (var key in file.headers) {
+					xhr.setRequestHeader(key, file.headers[key]);
+				}
 	
-	            var interval = setInterval(function () {
-	                if (!_self.active || !file.active || file.success || file.error) {
-	                    clearInterval(interval);
-	                    if (!file.success && !file.error) {
-	                        xhr.abort();
-	                    }
-	                }
-	            }, 100);
+				xhr.send(data);
+				file.active = true;
+				file.xhr = xhr;
 	
-	            this._uploadEvents('before', file);
-	        },
-	        _fileUploadPut: function _fileUploadPut(file) {
-	            var querys = (0, _assign2.default)({}, file.data);
-	            var queryArray = [];
-	            for (var key in querys) {
-	                if (querys[key] !== null && typeof querys[key] !== 'undefined') {
-	                    queryArray.push(encodeURIComponent(key) + '=' + encodeURIComponent(querys[key]));
-	                }
-	            }
-	            var queryString = queryArray.length ? (file.putAction.indexOf('?') == -1 ? '?' : '&') + queryArray.join('&') : '';
-	            var xhr = new XMLHttpRequest();
-	            xhr.open('PUT', file.putAction + queryString);
-	            this._fileUploadXhr(xhr, file, file.file);
-	        },
-	        _fileUploadHtml5: function _fileUploadHtml5(file) {
-	            var form = new window.FormData();
-	            for (var key in file.data) {
-	                if (typeof file.data[key] != 'string') {
-	                    form.append(key, (0, _stringify2.default)(file.data[key]));
-	                } else {
-	                    form.append(key, file.data[key]);
-	                }
-	            }
+				var interval = setInterval(function () {
+					if (!_self.active || !file.active || file.success || file.error) {
+						clearInterval(interval);
+						if (!file.success && !file.error) {
+							xhr.abort();
+						}
+					}
+				}, 100);
 	
-	            if (file['blob']) {
-	                form.append(this.name, file['blob'], file.file.name + '.dfzip');
-	            } else {
-	                form.append(this.name, file.file);
-	            }
+				this._uploadEvents('before', file);
+			},
+			_fileUploadPut: function _fileUploadPut(file) {
+				var querys = (0, _assign2.default)({}, file.data);
+				var queryArray = [];
+				for (var key in querys) {
+					if (querys[key] !== null && typeof querys[key] !== 'undefined') {
+						queryArray.push(encodeURIComponent(key) + '=' + encodeURIComponent(querys[key]));
+					}
+				}
+				var queryString = queryArray.length ? (file.putAction.indexOf('?') == -1 ? '?' : '&') + queryArray.join('&') : '';
+				var xhr = new XMLHttpRequest();
+				xhr.open('PUT', file.putAction + queryString);
+				this._fileUploadXhr(xhr, file, file.file);
+			},
+			_fileUploadHtml5: function _fileUploadHtml5(file) {
+				var form = new window.FormData();
+				for (var key in file.data) {
+					if (typeof file.data[key] != 'string') {
+						form.append(key, (0, _stringify2.default)(file.data[key]));
+					} else {
+						form.append(key, file.data[key]);
+					}
+				}
 	
-	            var xhr = new XMLHttpRequest();
-	            xhr.open('POST', file.postAction);
-	            this._fileUploadXhr(xhr, file, form);
-	        },
-	        _fileUploadHtml4: function _fileUploadHtml4(file) {
-	            var _self = this;
-	            var complete = false;
+				if (file['blob']) {
+					form.append(this.name, file['blob'], file.file.name + '.dfzip');
+				} else {
+					form.append(this.name, file.file);
+				}
 	
-	            var keydown = function keydown(e) {
-	                if (e.keyCode == 27) {
-	                    e.preventDefault();
-	                }
-	            };
-	            var iframe = document.createElement('iframe');
-	            iframe.id = 'upload-iframe-' + file.id;
-	            iframe.name = 'upload-iframe-' + file.id;
-	            iframe.src = 'about:blank';
-	            iframe.style = {
-	                width: '1px',
-	                height: '1px',
-	                top: '-9999px',
-	                left: '-9999px',
-	                position: 'absolute',
-	                marginTop: '-9999em'
-	            };
+				var xhr = new XMLHttpRequest();
+				xhr.open('POST', file.postAction);
+				this._fileUploadXhr(xhr, file, form);
+			},
+			_fileUploadHtml4: function _fileUploadHtml4(file) {
+				var _self = this;
+				var complete = false;
 	
-	            var form = document.createElement('form');
+				var keydown = function keydown(e) {
+					if (e.keyCode == 27) {
+						e.preventDefault();
+					}
+				};
+				var iframe = document.createElement('iframe');
+				iframe.id = 'upload-iframe-' + file.id;
+				iframe.name = 'upload-iframe-' + file.id;
+				iframe.src = 'about:blank';
+				iframe.style = {
+					width: '1px',
+					height: '1px',
+					top: '-9999px',
+					left: '-9999px',
+					position: 'absolute',
+					marginTop: '-9999em'
+				};
 	
-	            form.action = file.postAction;
+				var form = document.createElement('form');
 	
-	            form.name = 'upload-form-' + file.id;
+				form.action = file.postAction;
 	
-	            form.setAttribute('method', 'POST');
-	            form.setAttribute('target', 'upload-iframe-' + file.id);
-	            form.setAttribute('enctype', 'multipart/form-data');
+				form.name = 'upload-form-' + file.id;
 	
-	            for (var key in file.data) {
-	                var input = document.createElement('input');
-	                input.type = 'hidden';
-	                input.name = key;
-	                if (typeof file.data[key] != 'string') {
-	                    input.value = (0, _stringify2.default)(file.data[key]);
-	                } else {
-	                    input.value = file[key];
-	                }
-	                form.appendChild(input);
-	            }
+				form.setAttribute('method', 'POST');
+				form.setAttribute('target', 'upload-iframe-' + file.id);
+				form.setAttribute('enctype', 'multipart/form-data');
 	
-	            form.appendChild(file.el);
+				for (var key in file.data) {
+					var input = document.createElement('input');
+					input.type = 'hidden';
+					input.name = key;
+					if (typeof file.data[key] != 'string') {
+						input.value = (0, _stringify2.default)(file.data[key]);
+					} else {
+						input.value = file[key];
+					}
+					form.appendChild(input);
+				}
 	
-	            var getDocumentData = function getDocumentData() {
-	                var doc;
-	                try {
-	                    if (iframe.contentWindow) {
-	                        doc = iframe.contentWindow.document;
-	                    }
-	                } catch (err) {}
-	                if (!doc) {
-	                    try {
-	                        doc = iframe.contentDocument ? iframe.contentDocument : iframe.document;
-	                    } catch (err) {
-	                        doc = iframe.document;
-	                    }
-	                }
-	                if (doc && doc.body) {
-	                    return doc.body.innerHTML;
-	                }
-	                return null;
-	            };
+				form.appendChild(file.el);
 	
-	            var callback = function callback(e) {
-	                switch (e.type) {
-	                    case 'abort':
-	                        file.error = 'abort';
-	                        break;
-	                    case 'error':
-	                        var data = getDocumentData();
-	                        if (file.error) {} else if (data === null) {
-	                            file.error = 'network';
-	                        } else {
-	                            file.error = 'denied';
-	                        }
-	                        break;
-	                    default:
-	                        var data = getDocumentData();
-	                        if (file.error) {} else if (data === null) {
-	                            file.error = 'network';
-	                        } else {
-	                            file.progress = '100.00';
-	                            file.success = true;
-	                        }
-	                }
+				var getDocumentData = function getDocumentData() {
+					var doc;
+					try {
+						if (iframe.contentWindow) {
+							doc = iframe.contentWindow.document;
+						}
+					} catch (err) {}
+					if (!doc) {
+						try {
+							doc = iframe.contentDocument ? iframe.contentDocument : iframe.document;
+						} catch (err) {
+							doc = iframe.document;
+						}
+					}
+					if (doc && doc.body) {
+						return doc.body.innerHTML;
+					}
+					return null;
+				};
 	
-	                file.active = false;
-	                if (typeof data != "undefined") {
-	                    if (data && data.substr(0, 1) == '{' && data.substr(data.length - 1, 1) == '}') {
-	                        try {
-	                            data = JSON.parse(data);
-	                        } catch (err) {}
-	                    }
-	                    file.data = data;
-	                }
-	                if (!complete) {
-	                    complete = true;
-	                    document.body.removeEventListener('keydown', keydown);
-	                    document.body.removeEventListener('keydown', keydown);
-	                    iframe.parentNode && iframe.parentNode.removeChild(iframe);
-	                    if (!file.removed) {
-	                        _self._uploadEvents('after', file);
-	                    }
-	                    setTimeout(function () {
-	                        _self._fileUploads();
-	                    }, 50);
-	                }
-	            };
+				var callback = function callback(e) {
+					switch (e.type) {
+						case 'abort':
+							file.error = 'abort';
+							break;
+						case 'error':
+							var data = getDocumentData();
+							if (file.error) {} else if (data === null) {
+								file.error = 'network';
+							} else {
+								file.error = 'denied';
+							}
+							break;
+						default:
+							var data = getDocumentData();
+							if (file.error) {} else if (data === null) {
+								file.error = 'network';
+							} else {
+								file.progress = '100.00';
+								file.success = true;
+							}
+					}
 	
-	            setTimeout(function () {
-	                document.body.appendChild(iframe).appendChild(form).submit();
-	                iframe.onload = callback;
-	                iframe.onerror = callback;
-	                iframe.onabort = callback;
+					file.active = false;
+					if (typeof data != "undefined") {
+						if (data && data.substr(0, 1) == '{' && data.substr(data.length - 1, 1) == '}') {
+							try {
+								data = JSON.parse(data);
+							} catch (err) {}
+						}
+						file.data = data;
+					}
+					if (!complete) {
+						complete = true;
+						document.body.removeEventListener('keydown', keydown);
+						document.body.removeEventListener('keydown', keydown);
+						iframe.parentNode && iframe.parentNode.removeChild(iframe);
+						if (!file.removed) {
+							_self._uploadEvents('after', file);
+						}
+						setTimeout(function () {
+							_self._fileUploads();
+						}, 50);
+					}
+				};
 	
-	                file.active = true;
-	                file.iframe = iframe;
+				setTimeout(function () {
+					document.body.appendChild(iframe).appendChild(form).submit();
+					iframe.onload = callback;
+					iframe.onerror = callback;
+					iframe.onabort = callback;
 	
-	                document.body.addEventListener('keydown', keydown);
-	                var interval = setInterval(function () {
-	                    if (!_self.active || !file.active || file.success || file.error) {
-	                        clearInterval(interval);
-	                        if (!file.success && !file.error) {
-	                            iframe.onabort({ type: 'abort' });
-	                        }
-	                    }
-	                }, 50);
-	                _self._uploadEvents('before', file);
-	            }, 10);
-	        }
-	    }
+					file.active = true;
+					file.iframe = iframe;
+	
+					document.body.addEventListener('keydown', keydown);
+					var interval = setInterval(function () {
+						if (!_self.active || !file.active || file.success || file.error) {
+							clearInterval(interval);
+							if (!file.success && !file.error) {
+								iframe.onabort({ type: 'abort' });
+							}
+						}
+					}, 50);
+					_self._uploadEvents('before', file);
+				}, 10);
+			}
+		}
 	};
 
 /***/ }),
@@ -8740,9 +8807,29 @@ module.exports =
 
 /***/ }),
 /* 86 */
-/***/ (function(module, exports, __webpack_require__) {
+/***/ (function(module, exports) {
 
-	module.exports = { "default": __webpack_require__(92), __esModule: true };
+	"use strict";
+	
+	Object.defineProperty(exports, "__esModule", {
+		value: true
+	});
+	exports.debounce = debounce;
+	function debounce(func, wait, immediate) {
+		var timeout;
+		return function () {
+			var context = this,
+			    args = arguments;
+			var later = function later() {
+				timeout = null;
+				if (!immediate) func.apply(context, args);
+			};
+			var callNow = immediate && !timeout;
+			clearTimeout(timeout);
+			timeout = setTimeout(later, wait);
+			if (callNow) func.apply(context, args);
+		};
+	};
 
 /***/ }),
 /* 87 */
@@ -8754,7 +8841,7 @@ module.exports =
 /* 88 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	module.exports = { "default": __webpack_require__(95), __esModule: true };
+	module.exports = { "default": __webpack_require__(94), __esModule: true };
 
 /***/ }),
 /* 89 */
@@ -8766,15 +8853,21 @@ module.exports =
 /* 90 */
 /***/ (function(module, exports, __webpack_require__) {
 
+	module.exports = { "default": __webpack_require__(97), __esModule: true };
+
+/***/ }),
+/* 91 */
+/***/ (function(module, exports, __webpack_require__) {
+
 	"use strict";
 	
 	exports.__esModule = true;
 	
-	var _iterator = __webpack_require__(89);
+	var _iterator = __webpack_require__(90);
 	
 	var _iterator2 = _interopRequireDefault(_iterator);
 	
-	var _symbol = __webpack_require__(88);
+	var _symbol = __webpack_require__(89);
 	
 	var _symbol2 = _interopRequireDefault(_symbol);
 	
@@ -8789,7 +8882,7 @@ module.exports =
 	};
 
 /***/ }),
-/* 91 */
+/* 92 */
 /***/ (function(module, exports) {
 
 	'use strict'
@@ -8808,6 +8901,8 @@ module.exports =
 	  revLookup[code.charCodeAt(i)] = i
 	}
 	
+	// Support decoding URL-safe base64 strings, as Node.js does.
+	// See: https://en.wikipedia.org/wiki/Base64#URL_applications
 	revLookup['-'.charCodeAt(0)] = 62
 	revLookup['_'.charCodeAt(0)] = 63
 	
@@ -8827,22 +8922,22 @@ module.exports =
 	
 	function byteLength (b64) {
 	  // base64 is 4/3 + up to two characters of the original data
-	  return b64.length * 3 / 4 - placeHoldersCount(b64)
+	  return (b64.length * 3 / 4) - placeHoldersCount(b64)
 	}
 	
 	function toByteArray (b64) {
-	  var i, j, l, tmp, placeHolders, arr
+	  var i, l, tmp, placeHolders, arr
 	  var len = b64.length
 	  placeHolders = placeHoldersCount(b64)
 	
-	  arr = new Arr(len * 3 / 4 - placeHolders)
+	  arr = new Arr((len * 3 / 4) - placeHolders)
 	
 	  // if there are placeholders, only get up to the last complete 4 chars
 	  l = placeHolders > 0 ? len - 4 : len
 	
 	  var L = 0
 	
-	  for (i = 0, j = 0; i < l; i += 4, j += 3) {
+	  for (i = 0; i < l; i += 4) {
 	    tmp = (revLookup[b64.charCodeAt(i)] << 18) | (revLookup[b64.charCodeAt(i + 1)] << 12) | (revLookup[b64.charCodeAt(i + 2)] << 6) | revLookup[b64.charCodeAt(i + 3)]
 	    arr[L++] = (tmp >> 16) & 0xFF
 	    arr[L++] = (tmp >> 8) & 0xFF
@@ -8869,7 +8964,7 @@ module.exports =
 	  var tmp
 	  var output = []
 	  for (var i = start; i < end; i += 3) {
-	    tmp = (uint8[i] << 16) + (uint8[i + 1] << 8) + (uint8[i + 2])
+	    tmp = ((uint8[i] << 16) & 0xFF0000) + ((uint8[i + 1] << 8) & 0xFF00) + (uint8[i + 2] & 0xFF)
 	    output.push(tripletToBase64(tmp))
 	  }
 	  return output.join('')
@@ -8909,116 +9004,127 @@ module.exports =
 
 
 /***/ }),
-/* 92 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	var core  = __webpack_require__(11)
-	  , $JSON = core.JSON || (core.JSON = {stringify: JSON.stringify});
-	module.exports = function stringify(it){ // eslint-disable-line no-unused-vars
-	  return $JSON.stringify.apply($JSON, arguments);
-	};
-
-/***/ }),
 /* 93 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	__webpack_require__(117);
-	module.exports = __webpack_require__(11).Object.assign;
+	var core = __webpack_require__(9);
+	var $JSON = core.JSON || (core.JSON = { stringify: JSON.stringify });
+	module.exports = function stringify(it) { // eslint-disable-line no-unused-vars
+	  return $JSON.stringify.apply($JSON, arguments);
+	};
+
 
 /***/ }),
 /* 94 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	__webpack_require__(124);
-	module.exports = __webpack_require__(11).setImmediate;
+	__webpack_require__(117);
+	module.exports = __webpack_require__(9).Object.assign;
+
 
 /***/ }),
 /* 95 */
+/***/ (function(module, exports, __webpack_require__) {
+
+	__webpack_require__(124);
+	module.exports = __webpack_require__(9).setImmediate;
+
+
+/***/ }),
+/* 96 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	__webpack_require__(120);
 	__webpack_require__(118);
 	__webpack_require__(121);
 	__webpack_require__(122);
-	module.exports = __webpack_require__(11).Symbol;
+	module.exports = __webpack_require__(9).Symbol;
+
 
 /***/ }),
-/* 96 */
+/* 97 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	__webpack_require__(119);
 	__webpack_require__(123);
 	module.exports = __webpack_require__(44).f('iterator');
 
-/***/ }),
-/* 97 */
-/***/ (function(module, exports) {
-
-	module.exports = function(it){
-	  if(typeof it != 'function')throw TypeError(it + ' is not a function!');
-	  return it;
-	};
 
 /***/ }),
 /* 98 */
 /***/ (function(module, exports) {
 
-	module.exports = function(){ /* empty */ };
+	module.exports = function (it) {
+	  if (typeof it != 'function') throw TypeError(it + ' is not a function!');
+	  return it;
+	};
+
 
 /***/ }),
 /* 99 */
-/***/ (function(module, exports, __webpack_require__) {
+/***/ (function(module, exports) {
 
-	// false -> Array#indexOf
-	// true  -> Array#includes
-	var toIObject = __webpack_require__(8)
-	  , toLength  = __webpack_require__(115)
-	  , toIndex   = __webpack_require__(114);
-	module.exports = function(IS_INCLUDES){
-	  return function($this, el, fromIndex){
-	    var O      = toIObject($this)
-	      , length = toLength(O.length)
-	      , index  = toIndex(fromIndex, length)
-	      , value;
-	    // Array#includes uses SameValueZero equality algorithm
-	    if(IS_INCLUDES && el != el)while(length > index){
-	      value = O[index++];
-	      if(value != value)return true;
-	    // Array#toIndex ignores holes, Array#includes - not
-	    } else for(;length > index; index++)if(IS_INCLUDES || index in O){
-	      if(O[index] === el)return IS_INCLUDES || index || 0;
-	    } return !IS_INCLUDES && -1;
-	  };
-	};
+	module.exports = function () { /* empty */ };
+
 
 /***/ }),
 /* 100 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	// all enumerable object keys, includes symbols
-	var getKeys = __webpack_require__(18)
-	  , gOPS    = __webpack_require__(37)
-	  , pIE     = __webpack_require__(25);
-	module.exports = function(it){
-	  var result     = getKeys(it)
-	    , getSymbols = gOPS.f;
-	  if(getSymbols){
-	    var symbols = getSymbols(it)
-	      , isEnum  = pIE.f
-	      , i       = 0
-	      , key;
-	    while(symbols.length > i)if(isEnum.call(it, key = symbols[i++]))result.push(key);
-	  } return result;
+	// false -> Array#indexOf
+	// true  -> Array#includes
+	var toIObject = __webpack_require__(13);
+	var toLength = __webpack_require__(115);
+	var toAbsoluteIndex = __webpack_require__(114);
+	module.exports = function (IS_INCLUDES) {
+	  return function ($this, el, fromIndex) {
+	    var O = toIObject($this);
+	    var length = toLength(O.length);
+	    var index = toAbsoluteIndex(fromIndex, length);
+	    var value;
+	    // Array#includes uses SameValueZero equality algorithm
+	    // eslint-disable-next-line no-self-compare
+	    if (IS_INCLUDES && el != el) while (length > index) {
+	      value = O[index++];
+	      // eslint-disable-next-line no-self-compare
+	      if (value != value) return true;
+	    // Array#indexOf ignores holes, Array#includes - not
+	    } else for (;length > index; index++) if (IS_INCLUDES || index in O) {
+	      if (O[index] === el) return IS_INCLUDES || index || 0;
+	    } return !IS_INCLUDES && -1;
+	  };
 	};
+
 
 /***/ }),
 /* 101 */
+/***/ (function(module, exports, __webpack_require__) {
+
+	// all enumerable object keys, includes symbols
+	var getKeys = __webpack_require__(23);
+	var gOPS = __webpack_require__(37);
+	var pIE = __webpack_require__(24);
+	module.exports = function (it) {
+	  var result = getKeys(it);
+	  var getSymbols = gOPS.f;
+	  if (getSymbols) {
+	    var symbols = getSymbols(it);
+	    var isEnum = pIE.f;
+	    var i = 0;
+	    var key;
+	    while (symbols.length > i) if (isEnum.call(it, key = symbols[i++])) result.push(key);
+	  } return result;
+	};
+
+
+/***/ }),
+/* 102 */
 /***/ (function(module, exports) {
 
 	// fast apply, http://jsperf.lnkit.com/fast-apply/5
-	module.exports = function(fn, args, that){
+	module.exports = function (fn, args, that) {
 	  var un = that === undefined;
-	  switch(args.length){
+	  switch (args.length) {
 	    case 0: return un ? fn()
 	                      : fn.call(that);
 	    case 1: return un ? fn(args[0])
@@ -9029,117 +9135,107 @@ module.exports =
 	                      : fn.call(that, args[0], args[1], args[2]);
 	    case 4: return un ? fn(args[0], args[1], args[2], args[3])
 	                      : fn.call(that, args[0], args[1], args[2], args[3]);
-	  } return              fn.apply(that, args);
+	  } return fn.apply(that, args);
 	};
 
-/***/ }),
-/* 102 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	// 7.2.2 IsArray(argument)
-	var cof = __webpack_require__(31);
-	module.exports = Array.isArray || function isArray(arg){
-	  return cof(arg) == 'Array';
-	};
 
 /***/ }),
 /* 103 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	'use strict';
-	var create         = __webpack_require__(56)
-	  , descriptor     = __webpack_require__(26)
-	  , setToStringTag = __webpack_require__(38)
-	  , IteratorPrototype = {};
-	
-	// 25.1.2.1.1 %IteratorPrototype%[@@iterator]()
-	__webpack_require__(13)(IteratorPrototype, __webpack_require__(15)('iterator'), function(){ return this; });
-	
-	module.exports = function(Constructor, NAME, next){
-	  Constructor.prototype = create(IteratorPrototype, {next: descriptor(1, next)});
-	  setToStringTag(Constructor, NAME + ' Iterator');
+	// 7.2.2 IsArray(argument)
+	var cof = __webpack_require__(31);
+	module.exports = Array.isArray || function isArray(arg) {
+	  return cof(arg) == 'Array';
 	};
+
 
 /***/ }),
 /* 104 */
-/***/ (function(module, exports) {
+/***/ (function(module, exports, __webpack_require__) {
 
-	module.exports = function(done, value){
-	  return {value: value, done: !!done};
+	'use strict';
+	var create = __webpack_require__(56);
+	var descriptor = __webpack_require__(25);
+	var setToStringTag = __webpack_require__(38);
+	var IteratorPrototype = {};
+	
+	// 25.1.2.1.1 %IteratorPrototype%[@@iterator]()
+	__webpack_require__(11)(IteratorPrototype, __webpack_require__(14)('iterator'), function () { return this; });
+	
+	module.exports = function (Constructor, NAME, next) {
+	  Constructor.prototype = create(IteratorPrototype, { next: descriptor(1, next) });
+	  setToStringTag(Constructor, NAME + ' Iterator');
 	};
+
 
 /***/ }),
 /* 105 */
-/***/ (function(module, exports, __webpack_require__) {
+/***/ (function(module, exports) {
 
-	var getKeys   = __webpack_require__(18)
-	  , toIObject = __webpack_require__(8);
-	module.exports = function(object, el){
-	  var O      = toIObject(object)
-	    , keys   = getKeys(O)
-	    , length = keys.length
-	    , index  = 0
-	    , key;
-	  while(length > index)if(O[key = keys[index++]] === el)return key;
+	module.exports = function (done, value) {
+	  return { value: value, done: !!done };
 	};
+
 
 /***/ }),
 /* 106 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var META     = __webpack_require__(27)('meta')
-	  , isObject = __webpack_require__(24)
-	  , has      = __webpack_require__(7)
-	  , setDesc  = __webpack_require__(14).f
-	  , id       = 0;
-	var isExtensible = Object.isExtensible || function(){
+	var META = __webpack_require__(26)('meta');
+	var isObject = __webpack_require__(18);
+	var has = __webpack_require__(7);
+	var setDesc = __webpack_require__(12).f;
+	var id = 0;
+	var isExtensible = Object.isExtensible || function () {
 	  return true;
 	};
-	var FREEZE = !__webpack_require__(17)(function(){
+	var FREEZE = !__webpack_require__(17)(function () {
 	  return isExtensible(Object.preventExtensions({}));
 	});
-	var setMeta = function(it){
-	  setDesc(it, META, {value: {
+	var setMeta = function (it) {
+	  setDesc(it, META, { value: {
 	    i: 'O' + ++id, // object ID
 	    w: {}          // weak collections IDs
-	  }});
+	  } });
 	};
-	var fastKey = function(it, create){
+	var fastKey = function (it, create) {
 	  // return primitive with prefix
-	  if(!isObject(it))return typeof it == 'symbol' ? it : (typeof it == 'string' ? 'S' : 'P') + it;
-	  if(!has(it, META)){
+	  if (!isObject(it)) return typeof it == 'symbol' ? it : (typeof it == 'string' ? 'S' : 'P') + it;
+	  if (!has(it, META)) {
 	    // can't set metadata to uncaught frozen object
-	    if(!isExtensible(it))return 'F';
+	    if (!isExtensible(it)) return 'F';
 	    // not necessary to add metadata
-	    if(!create)return 'E';
+	    if (!create) return 'E';
 	    // add missing metadata
 	    setMeta(it);
 	  // return object ID
 	  } return it[META].i;
 	};
-	var getWeak = function(it, create){
-	  if(!has(it, META)){
+	var getWeak = function (it, create) {
+	  if (!has(it, META)) {
 	    // can't set metadata to uncaught frozen object
-	    if(!isExtensible(it))return true;
+	    if (!isExtensible(it)) return true;
 	    // not necessary to add metadata
-	    if(!create)return false;
+	    if (!create) return false;
 	    // add missing metadata
 	    setMeta(it);
 	  // return hash weak collections IDs
 	  } return it[META].w;
 	};
 	// add metadata on freeze-family methods calling
-	var onFreeze = function(it){
-	  if(FREEZE && meta.NEED && isExtensible(it) && !has(it, META))setMeta(it);
+	var onFreeze = function (it) {
+	  if (FREEZE && meta.NEED && isExtensible(it) && !has(it, META)) setMeta(it);
 	  return it;
 	};
 	var meta = module.exports = {
-	  KEY:      META,
-	  NEED:     false,
-	  fastKey:  fastKey,
-	  getWeak:  getWeak,
+	  KEY: META,
+	  NEED: false,
+	  fastKey: fastKey,
+	  getWeak: getWeak,
 	  onFreeze: onFreeze
 	};
+
 
 /***/ }),
 /* 107 */
@@ -9147,98 +9243,102 @@ module.exports =
 
 	'use strict';
 	// 19.1.2.1 Object.assign(target, source, ...)
-	var getKeys  = __webpack_require__(18)
-	  , gOPS     = __webpack_require__(37)
-	  , pIE      = __webpack_require__(25)
-	  , toObject = __webpack_require__(60)
-	  , IObject  = __webpack_require__(54)
-	  , $assign  = Object.assign;
+	var getKeys = __webpack_require__(23);
+	var gOPS = __webpack_require__(37);
+	var pIE = __webpack_require__(24);
+	var toObject = __webpack_require__(60);
+	var IObject = __webpack_require__(54);
+	var $assign = Object.assign;
 	
 	// should work with symbols and should have deterministic property order (V8 bug)
-	module.exports = !$assign || __webpack_require__(17)(function(){
-	  var A = {}
-	    , B = {}
-	    , S = Symbol()
-	    , K = 'abcdefghijklmnopqrst';
+	module.exports = !$assign || __webpack_require__(17)(function () {
+	  var A = {};
+	  var B = {};
+	  // eslint-disable-next-line no-undef
+	  var S = Symbol();
+	  var K = 'abcdefghijklmnopqrst';
 	  A[S] = 7;
-	  K.split('').forEach(function(k){ B[k] = k; });
+	  K.split('').forEach(function (k) { B[k] = k; });
 	  return $assign({}, A)[S] != 7 || Object.keys($assign({}, B)).join('') != K;
-	}) ? function assign(target, source){ // eslint-disable-line no-unused-vars
-	  var T     = toObject(target)
-	    , aLen  = arguments.length
-	    , index = 1
-	    , getSymbols = gOPS.f
-	    , isEnum     = pIE.f;
-	  while(aLen > index){
-	    var S      = IObject(arguments[index++])
-	      , keys   = getSymbols ? getKeys(S).concat(getSymbols(S)) : getKeys(S)
-	      , length = keys.length
-	      , j      = 0
-	      , key;
-	    while(length > j)if(isEnum.call(S, key = keys[j++]))T[key] = S[key];
+	}) ? function assign(target, source) { // eslint-disable-line no-unused-vars
+	  var T = toObject(target);
+	  var aLen = arguments.length;
+	  var index = 1;
+	  var getSymbols = gOPS.f;
+	  var isEnum = pIE.f;
+	  while (aLen > index) {
+	    var S = IObject(arguments[index++]);
+	    var keys = getSymbols ? getKeys(S).concat(getSymbols(S)) : getKeys(S);
+	    var length = keys.length;
+	    var j = 0;
+	    var key;
+	    while (length > j) if (isEnum.call(S, key = keys[j++])) T[key] = S[key];
 	  } return T;
 	} : $assign;
+
 
 /***/ }),
 /* 108 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var dP       = __webpack_require__(14)
-	  , anObject = __webpack_require__(22)
-	  , getKeys  = __webpack_require__(18);
+	var dP = __webpack_require__(12);
+	var anObject = __webpack_require__(21);
+	var getKeys = __webpack_require__(23);
 	
-	module.exports = __webpack_require__(12) ? Object.defineProperties : function defineProperties(O, Properties){
+	module.exports = __webpack_require__(10) ? Object.defineProperties : function defineProperties(O, Properties) {
 	  anObject(O);
-	  var keys   = getKeys(Properties)
-	    , length = keys.length
-	    , i = 0
-	    , P;
-	  while(length > i)dP.f(O, P = keys[i++], Properties[P]);
+	  var keys = getKeys(Properties);
+	  var length = keys.length;
+	  var i = 0;
+	  var P;
+	  while (length > i) dP.f(O, P = keys[i++], Properties[P]);
 	  return O;
 	};
+
 
 /***/ }),
 /* 109 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var pIE            = __webpack_require__(25)
-	  , createDesc     = __webpack_require__(26)
-	  , toIObject      = __webpack_require__(8)
-	  , toPrimitive    = __webpack_require__(42)
-	  , has            = __webpack_require__(7)
-	  , IE8_DOM_DEFINE = __webpack_require__(53)
-	  , gOPD           = Object.getOwnPropertyDescriptor;
+	var pIE = __webpack_require__(24);
+	var createDesc = __webpack_require__(25);
+	var toIObject = __webpack_require__(13);
+	var toPrimitive = __webpack_require__(42);
+	var has = __webpack_require__(7);
+	var IE8_DOM_DEFINE = __webpack_require__(53);
+	var gOPD = Object.getOwnPropertyDescriptor;
 	
-	exports.f = __webpack_require__(12) ? gOPD : function getOwnPropertyDescriptor(O, P){
+	exports.f = __webpack_require__(10) ? gOPD : function getOwnPropertyDescriptor(O, P) {
 	  O = toIObject(O);
 	  P = toPrimitive(P, true);
-	  if(IE8_DOM_DEFINE)try {
+	  if (IE8_DOM_DEFINE) try {
 	    return gOPD(O, P);
-	  } catch(e){ /* empty */ }
-	  if(has(O, P))return createDesc(!pIE.f.call(O, P), O[P]);
+	  } catch (e) { /* empty */ }
+	  if (has(O, P)) return createDesc(!pIE.f.call(O, P), O[P]);
 	};
+
 
 /***/ }),
 /* 110 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	// fallback for IE11 buggy Object.getOwnPropertyNames with iframe and window
-	var toIObject = __webpack_require__(8)
-	  , gOPN      = __webpack_require__(57).f
-	  , toString  = {}.toString;
+	var toIObject = __webpack_require__(13);
+	var gOPN = __webpack_require__(57).f;
+	var toString = {}.toString;
 	
 	var windowNames = typeof window == 'object' && window && Object.getOwnPropertyNames
 	  ? Object.getOwnPropertyNames(window) : [];
 	
-	var getWindowNames = function(it){
+	var getWindowNames = function (it) {
 	  try {
 	    return gOPN(it);
-	  } catch(e){
+	  } catch (e) {
 	    return windowNames.slice();
 	  }
 	};
 	
-	module.exports.f = function getOwnPropertyNames(it){
+	module.exports.f = function getOwnPropertyNames(it) {
 	  return windowNames && toString.call(it) == '[object Window]' ? getWindowNames(it) : gOPN(toIObject(it));
 	};
 
@@ -9248,34 +9348,35 @@ module.exports =
 /***/ (function(module, exports, __webpack_require__) {
 
 	// 19.1.2.9 / 15.2.3.2 Object.getPrototypeOf(O)
-	var has         = __webpack_require__(7)
-	  , toObject    = __webpack_require__(60)
-	  , IE_PROTO    = __webpack_require__(39)('IE_PROTO')
-	  , ObjectProto = Object.prototype;
+	var has = __webpack_require__(7);
+	var toObject = __webpack_require__(60);
+	var IE_PROTO = __webpack_require__(39)('IE_PROTO');
+	var ObjectProto = Object.prototype;
 	
-	module.exports = Object.getPrototypeOf || function(O){
+	module.exports = Object.getPrototypeOf || function (O) {
 	  O = toObject(O);
-	  if(has(O, IE_PROTO))return O[IE_PROTO];
-	  if(typeof O.constructor == 'function' && O instanceof O.constructor){
+	  if (has(O, IE_PROTO)) return O[IE_PROTO];
+	  if (typeof O.constructor == 'function' && O instanceof O.constructor) {
 	    return O.constructor.prototype;
 	  } return O instanceof Object ? ObjectProto : null;
 	};
+
 
 /***/ }),
 /* 112 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var toInteger = __webpack_require__(41)
-	  , defined   = __webpack_require__(32);
+	var toInteger = __webpack_require__(41);
+	var defined = __webpack_require__(32);
 	// true  -> String#at
 	// false -> String#codePointAt
-	module.exports = function(TO_STRING){
-	  return function(that, pos){
-	    var s = String(defined(that))
-	      , i = toInteger(pos)
-	      , l = s.length
-	      , a, b;
-	    if(i < 0 || i >= l)return TO_STRING ? '' : undefined;
+	module.exports = function (TO_STRING) {
+	  return function (that, pos) {
+	    var s = String(defined(that));
+	    var i = toInteger(pos);
+	    var l = s.length;
+	    var a, b;
+	    if (i < 0 || i >= l) return TO_STRING ? '' : undefined;
 	    a = s.charCodeAt(i);
 	    return a < 0xd800 || a > 0xdbff || i + 1 === l || (b = s.charCodeAt(i + 1)) < 0xdc00 || b > 0xdfff
 	      ? TO_STRING ? s.charAt(i) : a
@@ -9283,138 +9384,151 @@ module.exports =
 	  };
 	};
 
+
 /***/ }),
 /* 113 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var ctx                = __webpack_require__(51)
-	  , invoke             = __webpack_require__(101)
-	  , html               = __webpack_require__(52)
-	  , cel                = __webpack_require__(33)
-	  , global             = __webpack_require__(4)
-	  , process            = global.process
-	  , setTask            = global.setImmediate
-	  , clearTask          = global.clearImmediate
-	  , MessageChannel     = global.MessageChannel
-	  , counter            = 0
-	  , queue              = {}
-	  , ONREADYSTATECHANGE = 'onreadystatechange'
-	  , defer, channel, port;
-	var run = function(){
+	var ctx = __webpack_require__(51);
+	var invoke = __webpack_require__(102);
+	var html = __webpack_require__(52);
+	var cel = __webpack_require__(33);
+	var global = __webpack_require__(4);
+	var process = global.process;
+	var setTask = global.setImmediate;
+	var clearTask = global.clearImmediate;
+	var MessageChannel = global.MessageChannel;
+	var Dispatch = global.Dispatch;
+	var counter = 0;
+	var queue = {};
+	var ONREADYSTATECHANGE = 'onreadystatechange';
+	var defer, channel, port;
+	var run = function () {
 	  var id = +this;
-	  if(queue.hasOwnProperty(id)){
+	  // eslint-disable-next-line no-prototype-builtins
+	  if (queue.hasOwnProperty(id)) {
 	    var fn = queue[id];
 	    delete queue[id];
 	    fn();
 	  }
 	};
-	var listener = function(event){
+	var listener = function (event) {
 	  run.call(event.data);
 	};
 	// Node.js 0.9+ & IE10+ has setImmediate, otherwise:
-	if(!setTask || !clearTask){
-	  setTask = function setImmediate(fn){
-	    var args = [], i = 1;
-	    while(arguments.length > i)args.push(arguments[i++]);
-	    queue[++counter] = function(){
+	if (!setTask || !clearTask) {
+	  setTask = function setImmediate(fn) {
+	    var args = [];
+	    var i = 1;
+	    while (arguments.length > i) args.push(arguments[i++]);
+	    queue[++counter] = function () {
+	      // eslint-disable-next-line no-new-func
 	      invoke(typeof fn == 'function' ? fn : Function(fn), args);
 	    };
 	    defer(counter);
 	    return counter;
 	  };
-	  clearTask = function clearImmediate(id){
+	  clearTask = function clearImmediate(id) {
 	    delete queue[id];
 	  };
 	  // Node.js 0.8-
-	  if(__webpack_require__(31)(process) == 'process'){
-	    defer = function(id){
+	  if (__webpack_require__(31)(process) == 'process') {
+	    defer = function (id) {
 	      process.nextTick(ctx(run, id, 1));
 	    };
+	  // Sphere (JS game engine) Dispatch API
+	  } else if (Dispatch && Dispatch.now) {
+	    defer = function (id) {
+	      Dispatch.now(ctx(run, id, 1));
+	    };
 	  // Browsers with MessageChannel, includes WebWorkers
-	  } else if(MessageChannel){
-	    channel = new MessageChannel;
-	    port    = channel.port2;
+	  } else if (MessageChannel) {
+	    channel = new MessageChannel();
+	    port = channel.port2;
 	    channel.port1.onmessage = listener;
 	    defer = ctx(port.postMessage, port, 1);
 	  // Browsers with postMessage, skip WebWorkers
 	  // IE8 has postMessage, but it's sync & typeof its postMessage is 'object'
-	  } else if(global.addEventListener && typeof postMessage == 'function' && !global.importScripts){
-	    defer = function(id){
+	  } else if (global.addEventListener && typeof postMessage == 'function' && !global.importScripts) {
+	    defer = function (id) {
 	      global.postMessage(id + '', '*');
 	    };
 	    global.addEventListener('message', listener, false);
 	  // IE8-
-	  } else if(ONREADYSTATECHANGE in cel('script')){
-	    defer = function(id){
-	      html.appendChild(cel('script'))[ONREADYSTATECHANGE] = function(){
+	  } else if (ONREADYSTATECHANGE in cel('script')) {
+	    defer = function (id) {
+	      html.appendChild(cel('script'))[ONREADYSTATECHANGE] = function () {
 	        html.removeChild(this);
 	        run.call(id);
 	      };
 	    };
 	  // Rest old browsers
 	  } else {
-	    defer = function(id){
+	    defer = function (id) {
 	      setTimeout(ctx(run, id, 1), 0);
 	    };
 	  }
 	}
 	module.exports = {
-	  set:   setTask,
+	  set: setTask,
 	  clear: clearTask
 	};
+
 
 /***/ }),
 /* 114 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var toInteger = __webpack_require__(41)
-	  , max       = Math.max
-	  , min       = Math.min;
-	module.exports = function(index, length){
+	var toInteger = __webpack_require__(41);
+	var max = Math.max;
+	var min = Math.min;
+	module.exports = function (index, length) {
 	  index = toInteger(index);
 	  return index < 0 ? max(index + length, 0) : min(index, length);
 	};
+
 
 /***/ }),
 /* 115 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	// 7.1.15 ToLength
-	var toInteger = __webpack_require__(41)
-	  , min       = Math.min;
-	module.exports = function(it){
+	var toInteger = __webpack_require__(41);
+	var min = Math.min;
+	module.exports = function (it) {
 	  return it > 0 ? min(toInteger(it), 0x1fffffffffffff) : 0; // pow(2, 53) - 1 == 9007199254740991
 	};
+
 
 /***/ }),
 /* 116 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	'use strict';
-	var addToUnscopables = __webpack_require__(98)
-	  , step             = __webpack_require__(104)
-	  , Iterators        = __webpack_require__(35)
-	  , toIObject        = __webpack_require__(8);
+	var addToUnscopables = __webpack_require__(99);
+	var step = __webpack_require__(105);
+	var Iterators = __webpack_require__(35);
+	var toIObject = __webpack_require__(13);
 	
 	// 22.1.3.4 Array.prototype.entries()
 	// 22.1.3.13 Array.prototype.keys()
 	// 22.1.3.29 Array.prototype.values()
 	// 22.1.3.30 Array.prototype[@@iterator]()
-	module.exports = __webpack_require__(55)(Array, 'Array', function(iterated, kind){
+	module.exports = __webpack_require__(55)(Array, 'Array', function (iterated, kind) {
 	  this._t = toIObject(iterated); // target
 	  this._i = 0;                   // next index
 	  this._k = kind;                // kind
 	// 22.1.5.2.1 %ArrayIteratorPrototype%.next()
-	}, function(){
-	  var O     = this._t
-	    , kind  = this._k
-	    , index = this._i++;
-	  if(!O || index >= O.length){
+	}, function () {
+	  var O = this._t;
+	  var kind = this._k;
+	  var index = this._i++;
+	  if (!O || index >= O.length) {
 	    this._t = undefined;
 	    return step(1);
 	  }
-	  if(kind == 'keys'  )return step(0, index);
-	  if(kind == 'values')return step(0, O[index]);
+	  if (kind == 'keys') return step(0, index);
+	  if (kind == 'values') return step(0, O[index]);
 	  return step(0, [index, O[index]]);
 	}, 'values');
 	
@@ -9425,14 +9539,16 @@ module.exports =
 	addToUnscopables('values');
 	addToUnscopables('entries');
 
+
 /***/ }),
 /* 117 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	// 19.1.3.1 Object.assign(target, source)
-	var $export = __webpack_require__(23);
+	var $export = __webpack_require__(22);
 	
-	$export($export.S + $export.F, 'Object', {assign: __webpack_require__(107)});
+	$export($export.S + $export.F, 'Object', { assign: __webpack_require__(107) });
+
 
 /***/ }),
 /* 118 */
@@ -9445,22 +9561,23 @@ module.exports =
 /***/ (function(module, exports, __webpack_require__) {
 
 	'use strict';
-	var $at  = __webpack_require__(112)(true);
+	var $at = __webpack_require__(112)(true);
 	
 	// 21.1.3.27 String.prototype[@@iterator]()
-	__webpack_require__(55)(String, 'String', function(iterated){
+	__webpack_require__(55)(String, 'String', function (iterated) {
 	  this._t = String(iterated); // target
 	  this._i = 0;                // next index
 	// 21.1.5.2.1 %StringIteratorPrototype%.next()
-	}, function(){
-	  var O     = this._t
-	    , index = this._i
-	    , point;
-	  if(index >= O.length)return {value: undefined, done: true};
+	}, function () {
+	  var O = this._t;
+	  var index = this._i;
+	  var point;
+	  if (index >= O.length) return { value: undefined, done: true };
 	  point = $at(O, index);
 	  this._i += point.length;
-	  return {value: point, done: false};
+	  return { value: point, done: false };
 	});
+
 
 /***/ }),
 /* 120 */
@@ -9468,181 +9585,189 @@ module.exports =
 
 	'use strict';
 	// ECMAScript 6 symbols shim
-	var global         = __webpack_require__(4)
-	  , has            = __webpack_require__(7)
-	  , DESCRIPTORS    = __webpack_require__(12)
-	  , $export        = __webpack_require__(23)
-	  , redefine       = __webpack_require__(59)
-	  , META           = __webpack_require__(106).KEY
-	  , $fails         = __webpack_require__(17)
-	  , shared         = __webpack_require__(40)
-	  , setToStringTag = __webpack_require__(38)
-	  , uid            = __webpack_require__(27)
-	  , wks            = __webpack_require__(15)
-	  , wksExt         = __webpack_require__(44)
-	  , wksDefine      = __webpack_require__(43)
-	  , keyOf          = __webpack_require__(105)
-	  , enumKeys       = __webpack_require__(100)
-	  , isArray        = __webpack_require__(102)
-	  , anObject       = __webpack_require__(22)
-	  , toIObject      = __webpack_require__(8)
-	  , toPrimitive    = __webpack_require__(42)
-	  , createDesc     = __webpack_require__(26)
-	  , _create        = __webpack_require__(56)
-	  , gOPNExt        = __webpack_require__(110)
-	  , $GOPD          = __webpack_require__(109)
-	  , $DP            = __webpack_require__(14)
-	  , $keys          = __webpack_require__(18)
-	  , gOPD           = $GOPD.f
-	  , dP             = $DP.f
-	  , gOPN           = gOPNExt.f
-	  , $Symbol        = global.Symbol
-	  , $JSON          = global.JSON
-	  , _stringify     = $JSON && $JSON.stringify
-	  , PROTOTYPE      = 'prototype'
-	  , HIDDEN         = wks('_hidden')
-	  , TO_PRIMITIVE   = wks('toPrimitive')
-	  , isEnum         = {}.propertyIsEnumerable
-	  , SymbolRegistry = shared('symbol-registry')
-	  , AllSymbols     = shared('symbols')
-	  , ObjectProto    = Object[PROTOTYPE]
-	  , USE_NATIVE     = typeof $Symbol == 'function'
-	  , QObject        = global.QObject;
+	var global = __webpack_require__(4);
+	var has = __webpack_require__(7);
+	var DESCRIPTORS = __webpack_require__(10);
+	var $export = __webpack_require__(22);
+	var redefine = __webpack_require__(59);
+	var META = __webpack_require__(106).KEY;
+	var $fails = __webpack_require__(17);
+	var shared = __webpack_require__(40);
+	var setToStringTag = __webpack_require__(38);
+	var uid = __webpack_require__(26);
+	var wks = __webpack_require__(14);
+	var wksExt = __webpack_require__(44);
+	var wksDefine = __webpack_require__(43);
+	var enumKeys = __webpack_require__(101);
+	var isArray = __webpack_require__(103);
+	var anObject = __webpack_require__(21);
+	var isObject = __webpack_require__(18);
+	var toIObject = __webpack_require__(13);
+	var toPrimitive = __webpack_require__(42);
+	var createDesc = __webpack_require__(25);
+	var _create = __webpack_require__(56);
+	var gOPNExt = __webpack_require__(110);
+	var $GOPD = __webpack_require__(109);
+	var $DP = __webpack_require__(12);
+	var $keys = __webpack_require__(23);
+	var gOPD = $GOPD.f;
+	var dP = $DP.f;
+	var gOPN = gOPNExt.f;
+	var $Symbol = global.Symbol;
+	var $JSON = global.JSON;
+	var _stringify = $JSON && $JSON.stringify;
+	var PROTOTYPE = 'prototype';
+	var HIDDEN = wks('_hidden');
+	var TO_PRIMITIVE = wks('toPrimitive');
+	var isEnum = {}.propertyIsEnumerable;
+	var SymbolRegistry = shared('symbol-registry');
+	var AllSymbols = shared('symbols');
+	var OPSymbols = shared('op-symbols');
+	var ObjectProto = Object[PROTOTYPE];
+	var USE_NATIVE = typeof $Symbol == 'function';
+	var QObject = global.QObject;
 	// Don't use setters in Qt Script, https://github.com/zloirock/core-js/issues/173
 	var setter = !QObject || !QObject[PROTOTYPE] || !QObject[PROTOTYPE].findChild;
 	
 	// fallback for old Android, https://code.google.com/p/v8/issues/detail?id=687
-	var setSymbolDesc = DESCRIPTORS && $fails(function(){
+	var setSymbolDesc = DESCRIPTORS && $fails(function () {
 	  return _create(dP({}, 'a', {
-	    get: function(){ return dP(this, 'a', {value: 7}).a; }
+	    get: function () { return dP(this, 'a', { value: 7 }).a; }
 	  })).a != 7;
-	}) ? function(it, key, D){
+	}) ? function (it, key, D) {
 	  var protoDesc = gOPD(ObjectProto, key);
-	  if(protoDesc)delete ObjectProto[key];
+	  if (protoDesc) delete ObjectProto[key];
 	  dP(it, key, D);
-	  if(protoDesc && it !== ObjectProto)dP(ObjectProto, key, protoDesc);
+	  if (protoDesc && it !== ObjectProto) dP(ObjectProto, key, protoDesc);
 	} : dP;
 	
-	var wrap = function(tag){
+	var wrap = function (tag) {
 	  var sym = AllSymbols[tag] = _create($Symbol[PROTOTYPE]);
 	  sym._k = tag;
 	  return sym;
 	};
 	
-	var isSymbol = USE_NATIVE && typeof $Symbol.iterator == 'symbol' ? function(it){
+	var isSymbol = USE_NATIVE && typeof $Symbol.iterator == 'symbol' ? function (it) {
 	  return typeof it == 'symbol';
-	} : function(it){
+	} : function (it) {
 	  return it instanceof $Symbol;
 	};
 	
-	var $defineProperty = function defineProperty(it, key, D){
+	var $defineProperty = function defineProperty(it, key, D) {
+	  if (it === ObjectProto) $defineProperty(OPSymbols, key, D);
 	  anObject(it);
 	  key = toPrimitive(key, true);
 	  anObject(D);
-	  if(has(AllSymbols, key)){
-	    if(!D.enumerable){
-	      if(!has(it, HIDDEN))dP(it, HIDDEN, createDesc(1, {}));
+	  if (has(AllSymbols, key)) {
+	    if (!D.enumerable) {
+	      if (!has(it, HIDDEN)) dP(it, HIDDEN, createDesc(1, {}));
 	      it[HIDDEN][key] = true;
 	    } else {
-	      if(has(it, HIDDEN) && it[HIDDEN][key])it[HIDDEN][key] = false;
-	      D = _create(D, {enumerable: createDesc(0, false)});
+	      if (has(it, HIDDEN) && it[HIDDEN][key]) it[HIDDEN][key] = false;
+	      D = _create(D, { enumerable: createDesc(0, false) });
 	    } return setSymbolDesc(it, key, D);
 	  } return dP(it, key, D);
 	};
-	var $defineProperties = function defineProperties(it, P){
+	var $defineProperties = function defineProperties(it, P) {
 	  anObject(it);
-	  var keys = enumKeys(P = toIObject(P))
-	    , i    = 0
-	    , l = keys.length
-	    , key;
-	  while(l > i)$defineProperty(it, key = keys[i++], P[key]);
+	  var keys = enumKeys(P = toIObject(P));
+	  var i = 0;
+	  var l = keys.length;
+	  var key;
+	  while (l > i) $defineProperty(it, key = keys[i++], P[key]);
 	  return it;
 	};
-	var $create = function create(it, P){
+	var $create = function create(it, P) {
 	  return P === undefined ? _create(it) : $defineProperties(_create(it), P);
 	};
-	var $propertyIsEnumerable = function propertyIsEnumerable(key){
+	var $propertyIsEnumerable = function propertyIsEnumerable(key) {
 	  var E = isEnum.call(this, key = toPrimitive(key, true));
+	  if (this === ObjectProto && has(AllSymbols, key) && !has(OPSymbols, key)) return false;
 	  return E || !has(this, key) || !has(AllSymbols, key) || has(this, HIDDEN) && this[HIDDEN][key] ? E : true;
 	};
-	var $getOwnPropertyDescriptor = function getOwnPropertyDescriptor(it, key){
-	  var D = gOPD(it = toIObject(it), key = toPrimitive(key, true));
-	  if(D && has(AllSymbols, key) && !(has(it, HIDDEN) && it[HIDDEN][key]))D.enumerable = true;
+	var $getOwnPropertyDescriptor = function getOwnPropertyDescriptor(it, key) {
+	  it = toIObject(it);
+	  key = toPrimitive(key, true);
+	  if (it === ObjectProto && has(AllSymbols, key) && !has(OPSymbols, key)) return;
+	  var D = gOPD(it, key);
+	  if (D && has(AllSymbols, key) && !(has(it, HIDDEN) && it[HIDDEN][key])) D.enumerable = true;
 	  return D;
 	};
-	var $getOwnPropertyNames = function getOwnPropertyNames(it){
-	  var names  = gOPN(toIObject(it))
-	    , result = []
-	    , i      = 0
-	    , key;
-	  while(names.length > i)if(!has(AllSymbols, key = names[i++]) && key != HIDDEN && key != META)result.push(key);
-	  return result;
+	var $getOwnPropertyNames = function getOwnPropertyNames(it) {
+	  var names = gOPN(toIObject(it));
+	  var result = [];
+	  var i = 0;
+	  var key;
+	  while (names.length > i) {
+	    if (!has(AllSymbols, key = names[i++]) && key != HIDDEN && key != META) result.push(key);
+	  } return result;
 	};
-	var $getOwnPropertySymbols = function getOwnPropertySymbols(it){
-	  var names  = gOPN(toIObject(it))
-	    , result = []
-	    , i      = 0
-	    , key;
-	  while(names.length > i)if(has(AllSymbols, key = names[i++]))result.push(AllSymbols[key]);
-	  return result;
+	var $getOwnPropertySymbols = function getOwnPropertySymbols(it) {
+	  var IS_OP = it === ObjectProto;
+	  var names = gOPN(IS_OP ? OPSymbols : toIObject(it));
+	  var result = [];
+	  var i = 0;
+	  var key;
+	  while (names.length > i) {
+	    if (has(AllSymbols, key = names[i++]) && (IS_OP ? has(ObjectProto, key) : true)) result.push(AllSymbols[key]);
+	  } return result;
 	};
 	
 	// 19.4.1.1 Symbol([description])
-	if(!USE_NATIVE){
-	  $Symbol = function Symbol(){
-	    if(this instanceof $Symbol)throw TypeError('Symbol is not a constructor!');
+	if (!USE_NATIVE) {
+	  $Symbol = function Symbol() {
+	    if (this instanceof $Symbol) throw TypeError('Symbol is not a constructor!');
 	    var tag = uid(arguments.length > 0 ? arguments[0] : undefined);
-	    DESCRIPTORS && setter && setSymbolDesc(ObjectProto, tag, {
-	      configurable: true,
-	      set: function(value){
-	        if(has(this, HIDDEN) && has(this[HIDDEN], tag))this[HIDDEN][tag] = false;
-	        setSymbolDesc(this, tag, createDesc(1, value));
-	      }
-	    });
+	    var $set = function (value) {
+	      if (this === ObjectProto) $set.call(OPSymbols, value);
+	      if (has(this, HIDDEN) && has(this[HIDDEN], tag)) this[HIDDEN][tag] = false;
+	      setSymbolDesc(this, tag, createDesc(1, value));
+	    };
+	    if (DESCRIPTORS && setter) setSymbolDesc(ObjectProto, tag, { configurable: true, set: $set });
 	    return wrap(tag);
 	  };
-	  redefine($Symbol[PROTOTYPE], 'toString', function toString(){
+	  redefine($Symbol[PROTOTYPE], 'toString', function toString() {
 	    return this._k;
 	  });
 	
 	  $GOPD.f = $getOwnPropertyDescriptor;
-	  $DP.f   = $defineProperty;
+	  $DP.f = $defineProperty;
 	  __webpack_require__(57).f = gOPNExt.f = $getOwnPropertyNames;
-	  __webpack_require__(25).f  = $propertyIsEnumerable;
+	  __webpack_require__(24).f = $propertyIsEnumerable;
 	  __webpack_require__(37).f = $getOwnPropertySymbols;
 	
-	  if(DESCRIPTORS && !__webpack_require__(36)){
+	  if (DESCRIPTORS && !__webpack_require__(36)) {
 	    redefine(ObjectProto, 'propertyIsEnumerable', $propertyIsEnumerable, true);
 	  }
 	
-	  wksExt.f = function(name){
+	  wksExt.f = function (name) {
 	    return wrap(wks(name));
-	  }
+	  };
 	}
 	
-	$export($export.G + $export.W + $export.F * !USE_NATIVE, {Symbol: $Symbol});
+	$export($export.G + $export.W + $export.F * !USE_NATIVE, { Symbol: $Symbol });
 	
-	for(var symbols = (
+	for (var es6Symbols = (
 	  // 19.4.2.2, 19.4.2.3, 19.4.2.4, 19.4.2.6, 19.4.2.8, 19.4.2.9, 19.4.2.10, 19.4.2.11, 19.4.2.12, 19.4.2.13, 19.4.2.14
 	  'hasInstance,isConcatSpreadable,iterator,match,replace,search,species,split,toPrimitive,toStringTag,unscopables'
-	).split(','), i = 0; symbols.length > i; )wks(symbols[i++]);
+	).split(','), j = 0; es6Symbols.length > j;)wks(es6Symbols[j++]);
 	
-	for(var symbols = $keys(wks.store), i = 0; symbols.length > i; )wksDefine(symbols[i++]);
+	for (var wellKnownSymbols = $keys(wks.store), k = 0; wellKnownSymbols.length > k;) wksDefine(wellKnownSymbols[k++]);
 	
 	$export($export.S + $export.F * !USE_NATIVE, 'Symbol', {
 	  // 19.4.2.1 Symbol.for(key)
-	  'for': function(key){
+	  'for': function (key) {
 	    return has(SymbolRegistry, key += '')
 	      ? SymbolRegistry[key]
 	      : SymbolRegistry[key] = $Symbol(key);
 	  },
 	  // 19.4.2.5 Symbol.keyFor(sym)
-	  keyFor: function keyFor(key){
-	    if(isSymbol(key))return keyOf(SymbolRegistry, key);
-	    throw TypeError(key + ' is not a symbol!');
+	  keyFor: function keyFor(sym) {
+	    if (!isSymbol(sym)) throw TypeError(sym + ' is not a symbol!');
+	    for (var key in SymbolRegistry) if (SymbolRegistry[key] === sym) return key;
 	  },
-	  useSetter: function(){ setter = true; },
-	  useSimple: function(){ setter = false; }
+	  useSetter: function () { setter = true; },
+	  useSimple: function () { setter = false; }
 	});
 	
 	$export($export.S + $export.F * !USE_NATIVE, 'Object', {
@@ -9661,24 +9786,23 @@ module.exports =
 	});
 	
 	// 24.3.2 JSON.stringify(value [, replacer [, space]])
-	$JSON && $export($export.S + $export.F * (!USE_NATIVE || $fails(function(){
+	$JSON && $export($export.S + $export.F * (!USE_NATIVE || $fails(function () {
 	  var S = $Symbol();
 	  // MS Edge converts symbol values to JSON as {}
 	  // WebKit converts symbol values to JSON as null
 	  // V8 throws on boxed symbols
-	  return _stringify([S]) != '[null]' || _stringify({a: S}) != '{}' || _stringify(Object(S)) != '{}';
+	  return _stringify([S]) != '[null]' || _stringify({ a: S }) != '{}' || _stringify(Object(S)) != '{}';
 	})), 'JSON', {
-	  stringify: function stringify(it){
-	    if(it === undefined || isSymbol(it))return; // IE8 returns string on undefined
-	    var args = [it]
-	      , i    = 1
-	      , replacer, $replacer;
-	    while(arguments.length > i)args.push(arguments[i++]);
-	    replacer = args[1];
-	    if(typeof replacer == 'function')$replacer = replacer;
-	    if($replacer || !isArray(replacer))replacer = function(key, value){
-	      if($replacer)value = $replacer.call(this, key, value);
-	      if(!isSymbol(value))return value;
+	  stringify: function stringify(it) {
+	    var args = [it];
+	    var i = 1;
+	    var replacer, $replacer;
+	    while (arguments.length > i) args.push(arguments[i++]);
+	    $replacer = replacer = args[1];
+	    if (!isObject(replacer) && it === undefined || isSymbol(it)) return; // IE8 returns string on undefined
+	    if (!isArray(replacer)) replacer = function (key, value) {
+	      if (typeof $replacer == 'function') value = $replacer.call(this, key, value);
+	      if (!isSymbol(value)) return value;
 	    };
 	    args[1] = replacer;
 	    return _stringify.apply($JSON, args);
@@ -9686,7 +9810,7 @@ module.exports =
 	});
 	
 	// 19.4.3.4 Symbol.prototype[@@toPrimitive](hint)
-	$Symbol[PROTOTYPE][TO_PRIMITIVE] || __webpack_require__(13)($Symbol[PROTOTYPE], TO_PRIMITIVE, $Symbol[PROTOTYPE].valueOf);
+	$Symbol[PROTOTYPE][TO_PRIMITIVE] || __webpack_require__(11)($Symbol[PROTOTYPE], TO_PRIMITIVE, $Symbol[PROTOTYPE].valueOf);
 	// 19.4.3.5 Symbol.prototype[@@toStringTag]
 	setToStringTag($Symbol, 'Symbol');
 	// 20.2.1.9 Math[@@toStringTag]
@@ -9694,11 +9818,13 @@ module.exports =
 	// 24.3.3 JSON[@@toStringTag]
 	setToStringTag(global.JSON, 'JSON', true);
 
+
 /***/ }),
 /* 121 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	__webpack_require__(43)('asyncIterator');
+
 
 /***/ }),
 /* 122 */
@@ -9706,34 +9832,43 @@ module.exports =
 
 	__webpack_require__(43)('observable');
 
+
 /***/ }),
 /* 123 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	__webpack_require__(116);
-	var global        = __webpack_require__(4)
-	  , hide          = __webpack_require__(13)
-	  , Iterators     = __webpack_require__(35)
-	  , TO_STRING_TAG = __webpack_require__(15)('toStringTag');
+	var global = __webpack_require__(4);
+	var hide = __webpack_require__(11);
+	var Iterators = __webpack_require__(35);
+	var TO_STRING_TAG = __webpack_require__(14)('toStringTag');
 	
-	for(var collections = ['NodeList', 'DOMTokenList', 'MediaList', 'StyleSheetList', 'CSSRuleList'], i = 0; i < 5; i++){
-	  var NAME       = collections[i]
-	    , Collection = global[NAME]
-	    , proto      = Collection && Collection.prototype;
-	  if(proto && !proto[TO_STRING_TAG])hide(proto, TO_STRING_TAG, NAME);
+	var DOMIterables = ('CSSRuleList,CSSStyleDeclaration,CSSValueList,ClientRectList,DOMRectList,DOMStringList,' +
+	  'DOMTokenList,DataTransferItemList,FileList,HTMLAllCollection,HTMLCollection,HTMLFormElement,HTMLSelectElement,' +
+	  'MediaList,MimeTypeArray,NamedNodeMap,NodeList,PaintRequestList,Plugin,PluginArray,SVGLengthList,SVGNumberList,' +
+	  'SVGPathSegList,SVGPointList,SVGStringList,SVGTransformList,SourceBufferList,StyleSheetList,TextTrackCueList,' +
+	  'TextTrackList,TouchList').split(',');
+	
+	for (var i = 0; i < DOMIterables.length; i++) {
+	  var NAME = DOMIterables[i];
+	  var Collection = global[NAME];
+	  var proto = Collection && Collection.prototype;
+	  if (proto && !proto[TO_STRING_TAG]) hide(proto, TO_STRING_TAG, NAME);
 	  Iterators[NAME] = Iterators.Array;
 	}
+
 
 /***/ }),
 /* 124 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var $export = __webpack_require__(23)
-	  , $task   = __webpack_require__(113);
+	var $export = __webpack_require__(22);
+	var $task = __webpack_require__(113);
 	$export($export.G + $export.B, {
-	  setImmediate:   $task.set,
+	  setImmediate: $task.set,
 	  clearImmediate: $task.clear
 	});
+
 
 /***/ }),
 /* 125 */
@@ -9811,7 +9946,7 @@ module.exports =
 
 	exports.read = function (buffer, offset, isLE, mLen, nBytes) {
 	  var e, m
-	  var eLen = nBytes * 8 - mLen - 1
+	  var eLen = (nBytes * 8) - mLen - 1
 	  var eMax = (1 << eLen) - 1
 	  var eBias = eMax >> 1
 	  var nBits = -7
@@ -9824,12 +9959,12 @@ module.exports =
 	  e = s & ((1 << (-nBits)) - 1)
 	  s >>= (-nBits)
 	  nBits += eLen
-	  for (; nBits > 0; e = e * 256 + buffer[offset + i], i += d, nBits -= 8) {}
+	  for (; nBits > 0; e = (e * 256) + buffer[offset + i], i += d, nBits -= 8) {}
 	
 	  m = e & ((1 << (-nBits)) - 1)
 	  e >>= (-nBits)
 	  nBits += mLen
-	  for (; nBits > 0; m = m * 256 + buffer[offset + i], i += d, nBits -= 8) {}
+	  for (; nBits > 0; m = (m * 256) + buffer[offset + i], i += d, nBits -= 8) {}
 	
 	  if (e === 0) {
 	    e = 1 - eBias
@@ -9844,7 +9979,7 @@ module.exports =
 	
 	exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
 	  var e, m, c
-	  var eLen = nBytes * 8 - mLen - 1
+	  var eLen = (nBytes * 8) - mLen - 1
 	  var eMax = (1 << eLen) - 1
 	  var eBias = eMax >> 1
 	  var rt = (mLen === 23 ? Math.pow(2, -24) - Math.pow(2, -77) : 0)
@@ -9877,7 +10012,7 @@ module.exports =
 	      m = 0
 	      e = eMax
 	    } else if (e + eBias >= 1) {
-	      m = (value * c - 1) * Math.pow(2, mLen)
+	      m = ((value * c) - 1) * Math.pow(2, mLen)
 	      e = e + eBias
 	    } else {
 	      m = value * Math.pow(2, eBias - 1) * Math.pow(2, mLen)
@@ -9995,21 +10130,12 @@ module.exports =
 	function FlateWorker(action, options) {
 	    GenericWorker.call(this, "FlateWorker/" + action);
 	
-	    this._pako = new pako[action]({
-	        raw:true,
-	        level : options.level || -1 // default compression
-	    });
+	    this._pako = null;
+	    this._pakoAction = action;
+	    this._pakoOptions = options;
 	    // the `meta` object from the last chunk received
 	    // this allow this worker to pass around metadata
 	    this.meta = {};
-	
-	    var self = this;
-	    this._pako.onData = function(data) {
-	        self.push({
-	            data : data,
-	            meta : self.meta
-	        });
-	    };
 	}
 	
 	utils.inherits(FlateWorker, GenericWorker);
@@ -10019,6 +10145,9 @@ module.exports =
 	 */
 	FlateWorker.prototype.processChunk = function (chunk) {
 	    this.meta = chunk.meta;
+	    if (this._pako === null) {
+	        this._createPako();
+	    }
 	    this._pako.push(utils.transformTo(ARRAY_TYPE, chunk.data), false);
 	};
 	
@@ -10027,6 +10156,9 @@ module.exports =
 	 */
 	FlateWorker.prototype.flush = function () {
 	    GenericWorker.prototype.flush.call(this);
+	    if (this._pako === null) {
+	        this._createPako();
+	    }
 	    this._pako.push([], true);
 	};
 	/**
@@ -10035,6 +10167,26 @@ module.exports =
 	FlateWorker.prototype.cleanUp = function () {
 	    GenericWorker.prototype.cleanUp.call(this);
 	    this._pako = null;
+	};
+	
+	/**
+	 * Create the _pako object.
+	 * TODO: lazy-loading this object isn't the best solution but it's the
+	 * quickest. The best solution is to lazy-load the worker list. See also the
+	 * issue #446.
+	 */
+	FlateWorker.prototype._createPako = function () {
+	    this._pako = new pako[this._pakoAction]({
+	        raw: true,
+	        level: this._pakoOptions.level || -1 // default compression
+	    });
+	    var self = this;
+	    this._pako.onData = function(data) {
+	        self.push({
+	            data : data,
+	            meta : self.meta
+	        });
+	    };
 	};
 	
 	exports.compressWorker = function (compressionOptions) {
@@ -10702,7 +10854,7 @@ module.exports =
 	
 	// TODO find a better way to handle this version,
 	// a require('package.json').version doesn't work with webpack, see #327
-	JSZip.version = "3.1.3";
+	JSZip.version = "3.1.5";
 	
 	JSZip.loadAsync = function (content, options) {
 	    return new JSZip().loadAsync(content, options);
@@ -10723,7 +10875,7 @@ module.exports =
 	var utils = __webpack_require__(1);
 	var ZipEntries = __webpack_require__(140);
 	var Crc32Probe = __webpack_require__(71);
-	var nodejsUtils = __webpack_require__(29);
+	var nodejsUtils = __webpack_require__(28);
 	
 	/**
 	 * Check the CRC32 of an entry.
@@ -10888,8 +11040,8 @@ module.exports =
 	
 	var Readable = __webpack_require__(65).Readable;
 	
-	var util = __webpack_require__(162);
-	util.inherits(NodejsStreamOutputAdapter, Readable);
+	var utils = __webpack_require__(1);
+	utils.inherits(NodejsStreamOutputAdapter, Readable);
 	
 	/**
 	* A nodejs stream using a worker as source.
@@ -10941,7 +11093,7 @@ module.exports =
 	var CompressedObject = __webpack_require__(45);
 	var ZipObject = __webpack_require__(142);
 	var generate = __webpack_require__(131);
-	var nodejsUtils = __webpack_require__(29);
+	var nodejsUtils = __webpack_require__(28);
 	var NodejsStreamInputAdapter = __webpack_require__(134);
 	
 	
@@ -11447,7 +11599,7 @@ module.exports =
 	}
 	ZipEntries.prototype = {
 	    /**
-	     * Check that the reader is on the speficied signature.
+	     * Check that the reader is on the specified signature.
 	     * @param {string} expectedSignature the expected signature.
 	     * @throws {Error} if it is an other signature.
 	     */
@@ -11455,7 +11607,7 @@ module.exports =
 	        if (!this.reader.readAndCheckSignature(expectedSignature)) {
 	            this.reader.index -= 4;
 	            var signature = this.reader.readString(4);
-	            throw new Error("Corrupted zip or bug : unexpected signature " + "(" + utils.pretty(signature) + ", expected " + utils.pretty(expectedSignature) + ")");
+	            throw new Error("Corrupted zip or bug: unexpected signature " + "(" + utils.pretty(signature) + ", expected " + utils.pretty(expectedSignature) + ")");
 	        }
 	    },
 	    /**
@@ -11596,9 +11748,9 @@ module.exports =
 	
 	            if (isGarbage) {
 	                throw new Error("Can't find end of central directory : is this a zip file ? " +
-	                                "If it is, see http://stuk.github.io/jszip/documentation/howto/read_zip.html");
+	                                "If it is, see https://stuk.github.io/jszip/documentation/howto/read_zip.html");
 	            } else {
-	                throw new Error("Corrupted zip : can't find end of central directory");
+	                throw new Error("Corrupted zip: can't find end of central directory");
 	            }
 	
 	        }
@@ -11623,7 +11775,7 @@ module.exports =
 	
 	            /*
 	            Warning : the zip64 extension is supported, but ONLY if the 64bits integer read from
-	            the zip file can fit into a 32bits integer. This cannot be solved : Javascript represents
+	            the zip file can fit into a 32bits integer. This cannot be solved : JavaScript represents
 	            all numbers as 64-bit double precision IEEE 754 floating point numbers.
 	            So, we have 53bits for integers and bitwise operations treat everything as 32bits.
 	            see https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Operators/Bitwise_Operators
@@ -11633,7 +11785,7 @@ module.exports =
 	            // should look for a zip64 EOCD locator
 	            offset = this.reader.lastIndexOfSignature(sig.ZIP64_CENTRAL_DIRECTORY_LOCATOR);
 	            if (offset < 0) {
-	                throw new Error("Corrupted zip : can't find the ZIP64 end of central directory locator");
+	                throw new Error("Corrupted zip: can't find the ZIP64 end of central directory locator");
 	            }
 	            this.reader.setIndex(offset);
 	            this.checkSignature(sig.ZIP64_CENTRAL_DIRECTORY_LOCATOR);
@@ -11644,7 +11796,7 @@ module.exports =
 	                // console.warn("ZIP64 end of central directory not where expected.");
 	                this.relativeOffsetEndOfZip64CentralDir = this.reader.lastIndexOfSignature(sig.ZIP64_CENTRAL_DIRECTORY_END);
 	                if (this.relativeOffsetEndOfZip64CentralDir < 0) {
-	                    throw new Error("Corrupted zip : can't find the ZIP64 end of central directory");
+	                    throw new Error("Corrupted zip: can't find the ZIP64 end of central directory");
 	                }
 	            }
 	            this.reader.setIndex(this.relativeOffsetEndOfZip64CentralDir);
@@ -12033,20 +12185,29 @@ module.exports =
 	     * @return StreamHelper the stream.
 	     */
 	    internalStream: function (type) {
-	        var outputType = type.toLowerCase();
-	        var askUnicodeString = outputType === "string" || outputType === "text";
-	        if (outputType === "binarystring" || outputType === "text") {
-	            outputType = "string";
-	        }
-	        var result = this._decompressWorker();
+	        var result = null, outputType = "string";
+	        try {
+	            if (!type) {
+	                throw new Error("No output type specified.");
+	            }
+	            outputType = type.toLowerCase();
+	            var askUnicodeString = outputType === "string" || outputType === "text";
+	            if (outputType === "binarystring" || outputType === "text") {
+	                outputType = "string";
+	            }
+	            result = this._decompressWorker();
 	
-	        var isUnicodeString = !this._dataBinary;
+	            var isUnicodeString = !this._dataBinary;
 	
-	        if (isUnicodeString && !askUnicodeString) {
-	            result = result.pipe(new utf8.Utf8EncodeWorker());
-	        }
-	        if (!isUnicodeString && askUnicodeString) {
-	            result = result.pipe(new utf8.Utf8DecodeWorker());
+	            if (isUnicodeString && !askUnicodeString) {
+	                result = result.pipe(new utf8.Utf8EncodeWorker());
+	            }
+	            if (!isUnicodeString && askUnicodeString) {
+	                result = result.pipe(new utf8.Utf8DecodeWorker());
+	            }
+	        } catch (e) {
+	            result = new GenericWorker("error");
+	            result.error(e);
 	        }
 	
 	        return new StreamHelper(result, outputType, "");
@@ -12444,7 +12605,7 @@ module.exports =
 	/* internal
 	 * Deflate.chunks -> Array
 	 *
-	 * Chunks of output data, if [[Deflate#onData]] not overriden.
+	 * Chunks of output data, if [[Deflate#onData]] not overridden.
 	 **/
 	
 	/**
@@ -12597,7 +12758,7 @@ module.exports =
 	 * - data (Uint8Array|Array|ArrayBuffer|String): input data. Strings will be
 	 *   converted to utf8 byte sequence.
 	 * - mode (Number|Boolean): 0..6 for corresponding Z_NO_FLUSH..Z_TREE modes.
-	 *   See constants. Skipped or `false` means Z_NO_FLUSH, `true` meansh Z_FINISH.
+	 *   See constants. Skipped or `false` means Z_NO_FLUSH, `true` means Z_FINISH.
 	 *
 	 * Sends input data to deflate pipe, generating [[Deflate#onData]] calls with
 	 * new compressed chunks. Returns `true` on success. The last data block must have
@@ -12686,7 +12847,7 @@ module.exports =
 	
 	/**
 	 * Deflate#onData(chunk) -> Void
-	 * - chunk (Uint8Array|Array|String): ouput data. Type of array depends
+	 * - chunk (Uint8Array|Array|String): output data. Type of array depends
 	 *   on js engine support. When string output requested, each chunk
 	 *   will be string.
 	 *
@@ -12833,7 +12994,7 @@ module.exports =
 	/* internal
 	 * inflate.chunks -> Array
 	 *
-	 * Chunks of output data, if [[Inflate#onData]] not overriden.
+	 * Chunks of output data, if [[Inflate#onData]] not overridden.
 	 **/
 	
 	/**
@@ -12961,7 +13122,7 @@ module.exports =
 	 * Inflate#push(data[, mode]) -> Boolean
 	 * - data (Uint8Array|Array|ArrayBuffer|String): input data
 	 * - mode (Number|Boolean): 0..6 for corresponding Z_NO_FLUSH..Z_TREE modes.
-	 *   See constants. Skipped or `false` means Z_NO_FLUSH, `true` meansh Z_FINISH.
+	 *   See constants. Skipped or `false` means Z_NO_FLUSH, `true` means Z_FINISH.
 	 *
 	 * Sends input data to inflate pipe, generating [[Inflate#onData]] calls with
 	 * new output chunks. Returns `true` on success. The last data block must have
@@ -13108,7 +13269,7 @@ module.exports =
 	
 	/**
 	 * Inflate#onData(chunk) -> Void
-	 * - chunk (Uint8Array|Array|String): ouput data. Type of array depends
+	 * - chunk (Uint8Array|Array|String): output data. Type of array depends
 	 *   on js engine support. When string output requested, each chunk
 	 *   will be string.
 	 *
@@ -13135,7 +13296,7 @@ module.exports =
 	  if (status === c.Z_OK) {
 	    if (this.options.to === 'string') {
 	      // Glue & convert here, until we teach pako to send
-	      // utf8 alligned strings to onData
+	      // utf8 aligned strings to onData
 	      this.result = this.chunks.join('');
 	    } else {
 	      this.result = utils.flattenChunks(this.chunks);
@@ -15380,7 +15541,7 @@ module.exports =
 	                  break top;
 	                }
 	
-	// (!) This block is disabled in zlib defailts,
+	// (!) This block is disabled in zlib defaults,
 	// don't enable it for binary compatibility
 	//#ifdef INFLATE_ALLOW_INVALID_DISTANCE_TOOFAR_ARRR
 	//                if (len <= op - whave) {
@@ -15962,162 +16123,72 @@ module.exports =
 	  inf_leave: // goto emulation
 	  for (;;) {
 	    switch (state.mode) {
-	    case HEAD:
-	      if (state.wrap === 0) {
-	        state.mode = TYPEDO;
-	        break;
-	      }
-	      //=== NEEDBITS(16);
-	      while (bits < 16) {
-	        if (have === 0) { break inf_leave; }
-	        have--;
-	        hold += input[next++] << bits;
-	        bits += 8;
-	      }
-	      //===//
-	      if ((state.wrap & 2) && hold === 0x8b1f) {  /* gzip header */
-	        state.check = 0/*crc32(0L, Z_NULL, 0)*/;
-	        //=== CRC2(state.check, hold);
-	        hbuf[0] = hold & 0xff;
-	        hbuf[1] = (hold >>> 8) & 0xff;
-	        state.check = crc32(state.check, hbuf, 2, 0);
+	      case HEAD:
+	        if (state.wrap === 0) {
+	          state.mode = TYPEDO;
+	          break;
+	        }
+	        //=== NEEDBITS(16);
+	        while (bits < 16) {
+	          if (have === 0) { break inf_leave; }
+	          have--;
+	          hold += input[next++] << bits;
+	          bits += 8;
+	        }
 	        //===//
+	        if ((state.wrap & 2) && hold === 0x8b1f) {  /* gzip header */
+	          state.check = 0/*crc32(0L, Z_NULL, 0)*/;
+	          //=== CRC2(state.check, hold);
+	          hbuf[0] = hold & 0xff;
+	          hbuf[1] = (hold >>> 8) & 0xff;
+	          state.check = crc32(state.check, hbuf, 2, 0);
+	          //===//
 	
+	          //=== INITBITS();
+	          hold = 0;
+	          bits = 0;
+	          //===//
+	          state.mode = FLAGS;
+	          break;
+	        }
+	        state.flags = 0;           /* expect zlib header */
+	        if (state.head) {
+	          state.head.done = false;
+	        }
+	        if (!(state.wrap & 1) ||   /* check if zlib header allowed */
+	          (((hold & 0xff)/*BITS(8)*/ << 8) + (hold >> 8)) % 31) {
+	          strm.msg = 'incorrect header check';
+	          state.mode = BAD;
+	          break;
+	        }
+	        if ((hold & 0x0f)/*BITS(4)*/ !== Z_DEFLATED) {
+	          strm.msg = 'unknown compression method';
+	          state.mode = BAD;
+	          break;
+	        }
+	        //--- DROPBITS(4) ---//
+	        hold >>>= 4;
+	        bits -= 4;
+	        //---//
+	        len = (hold & 0x0f)/*BITS(4)*/ + 8;
+	        if (state.wbits === 0) {
+	          state.wbits = len;
+	        }
+	        else if (len > state.wbits) {
+	          strm.msg = 'invalid window size';
+	          state.mode = BAD;
+	          break;
+	        }
+	        state.dmax = 1 << len;
+	        //Tracev((stderr, "inflate:   zlib header ok\n"));
+	        strm.adler = state.check = 1/*adler32(0L, Z_NULL, 0)*/;
+	        state.mode = hold & 0x200 ? DICTID : TYPE;
 	        //=== INITBITS();
 	        hold = 0;
 	        bits = 0;
 	        //===//
-	        state.mode = FLAGS;
 	        break;
-	      }
-	      state.flags = 0;           /* expect zlib header */
-	      if (state.head) {
-	        state.head.done = false;
-	      }
-	      if (!(state.wrap & 1) ||   /* check if zlib header allowed */
-	        (((hold & 0xff)/*BITS(8)*/ << 8) + (hold >> 8)) % 31) {
-	        strm.msg = 'incorrect header check';
-	        state.mode = BAD;
-	        break;
-	      }
-	      if ((hold & 0x0f)/*BITS(4)*/ !== Z_DEFLATED) {
-	        strm.msg = 'unknown compression method';
-	        state.mode = BAD;
-	        break;
-	      }
-	      //--- DROPBITS(4) ---//
-	      hold >>>= 4;
-	      bits -= 4;
-	      //---//
-	      len = (hold & 0x0f)/*BITS(4)*/ + 8;
-	      if (state.wbits === 0) {
-	        state.wbits = len;
-	      }
-	      else if (len > state.wbits) {
-	        strm.msg = 'invalid window size';
-	        state.mode = BAD;
-	        break;
-	      }
-	      state.dmax = 1 << len;
-	      //Tracev((stderr, "inflate:   zlib header ok\n"));
-	      strm.adler = state.check = 1/*adler32(0L, Z_NULL, 0)*/;
-	      state.mode = hold & 0x200 ? DICTID : TYPE;
-	      //=== INITBITS();
-	      hold = 0;
-	      bits = 0;
-	      //===//
-	      break;
-	    case FLAGS:
-	      //=== NEEDBITS(16); */
-	      while (bits < 16) {
-	        if (have === 0) { break inf_leave; }
-	        have--;
-	        hold += input[next++] << bits;
-	        bits += 8;
-	      }
-	      //===//
-	      state.flags = hold;
-	      if ((state.flags & 0xff) !== Z_DEFLATED) {
-	        strm.msg = 'unknown compression method';
-	        state.mode = BAD;
-	        break;
-	      }
-	      if (state.flags & 0xe000) {
-	        strm.msg = 'unknown header flags set';
-	        state.mode = BAD;
-	        break;
-	      }
-	      if (state.head) {
-	        state.head.text = ((hold >> 8) & 1);
-	      }
-	      if (state.flags & 0x0200) {
-	        //=== CRC2(state.check, hold);
-	        hbuf[0] = hold & 0xff;
-	        hbuf[1] = (hold >>> 8) & 0xff;
-	        state.check = crc32(state.check, hbuf, 2, 0);
-	        //===//
-	      }
-	      //=== INITBITS();
-	      hold = 0;
-	      bits = 0;
-	      //===//
-	      state.mode = TIME;
-	      /* falls through */
-	    case TIME:
-	      //=== NEEDBITS(32); */
-	      while (bits < 32) {
-	        if (have === 0) { break inf_leave; }
-	        have--;
-	        hold += input[next++] << bits;
-	        bits += 8;
-	      }
-	      //===//
-	      if (state.head) {
-	        state.head.time = hold;
-	      }
-	      if (state.flags & 0x0200) {
-	        //=== CRC4(state.check, hold)
-	        hbuf[0] = hold & 0xff;
-	        hbuf[1] = (hold >>> 8) & 0xff;
-	        hbuf[2] = (hold >>> 16) & 0xff;
-	        hbuf[3] = (hold >>> 24) & 0xff;
-	        state.check = crc32(state.check, hbuf, 4, 0);
-	        //===
-	      }
-	      //=== INITBITS();
-	      hold = 0;
-	      bits = 0;
-	      //===//
-	      state.mode = OS;
-	      /* falls through */
-	    case OS:
-	      //=== NEEDBITS(16); */
-	      while (bits < 16) {
-	        if (have === 0) { break inf_leave; }
-	        have--;
-	        hold += input[next++] << bits;
-	        bits += 8;
-	      }
-	      //===//
-	      if (state.head) {
-	        state.head.xflags = (hold & 0xff);
-	        state.head.os = (hold >> 8);
-	      }
-	      if (state.flags & 0x0200) {
-	        //=== CRC2(state.check, hold);
-	        hbuf[0] = hold & 0xff;
-	        hbuf[1] = (hold >>> 8) & 0xff;
-	        state.check = crc32(state.check, hbuf, 2, 0);
-	        //===//
-	      }
-	      //=== INITBITS();
-	      hold = 0;
-	      bits = 0;
-	      //===//
-	      state.mode = EXLEN;
-	      /* falls through */
-	    case EXLEN:
-	      if (state.flags & 0x0400) {
+	      case FLAGS:
 	        //=== NEEDBITS(16); */
 	        while (bits < 16) {
 	          if (have === 0) { break inf_leave; }
@@ -16126,9 +16197,19 @@ module.exports =
 	          bits += 8;
 	        }
 	        //===//
-	        state.length = hold;
+	        state.flags = hold;
+	        if ((state.flags & 0xff) !== Z_DEFLATED) {
+	          strm.msg = 'unknown compression method';
+	          state.mode = BAD;
+	          break;
+	        }
+	        if (state.flags & 0xe000) {
+	          strm.msg = 'unknown header flags set';
+	          state.mode = BAD;
+	          break;
+	        }
 	        if (state.head) {
-	          state.head.extra_len = hold;
+	          state.head.text = ((hold >> 8) & 1);
 	        }
 	        if (state.flags & 0x0200) {
 	          //=== CRC2(state.check, hold);
@@ -16141,102 +16222,36 @@ module.exports =
 	        hold = 0;
 	        bits = 0;
 	        //===//
-	      }
-	      else if (state.head) {
-	        state.head.extra = null/*Z_NULL*/;
-	      }
-	      state.mode = EXTRA;
-	      /* falls through */
-	    case EXTRA:
-	      if (state.flags & 0x0400) {
-	        copy = state.length;
-	        if (copy > have) { copy = have; }
-	        if (copy) {
-	          if (state.head) {
-	            len = state.head.extra_len - state.length;
-	            if (!state.head.extra) {
-	              // Use untyped array for more conveniend processing later
-	              state.head.extra = new Array(state.head.extra_len);
-	            }
-	            utils.arraySet(
-	              state.head.extra,
-	              input,
-	              next,
-	              // extra field is limited to 65536 bytes
-	              // - no need for additional size check
-	              copy,
-	              /*len + copy > state.head.extra_max - len ? state.head.extra_max : copy,*/
-	              len
-	            );
-	            //zmemcpy(state.head.extra + len, next,
-	            //        len + copy > state.head.extra_max ?
-	            //        state.head.extra_max - len : copy);
-	          }
-	          if (state.flags & 0x0200) {
-	            state.check = crc32(state.check, input, copy, next);
-	          }
-	          have -= copy;
-	          next += copy;
-	          state.length -= copy;
+	        state.mode = TIME;
+	        /* falls through */
+	      case TIME:
+	        //=== NEEDBITS(32); */
+	        while (bits < 32) {
+	          if (have === 0) { break inf_leave; }
+	          have--;
+	          hold += input[next++] << bits;
+	          bits += 8;
 	        }
-	        if (state.length) { break inf_leave; }
-	      }
-	      state.length = 0;
-	      state.mode = NAME;
-	      /* falls through */
-	    case NAME:
-	      if (state.flags & 0x0800) {
-	        if (have === 0) { break inf_leave; }
-	        copy = 0;
-	        do {
-	          // TODO: 2 or 1 bytes?
-	          len = input[next + copy++];
-	          /* use constant limit because in js we should not preallocate memory */
-	          if (state.head && len &&
-	              (state.length < 65536 /*state.head.name_max*/)) {
-	            state.head.name += String.fromCharCode(len);
-	          }
-	        } while (len && copy < have);
-	
+	        //===//
+	        if (state.head) {
+	          state.head.time = hold;
+	        }
 	        if (state.flags & 0x0200) {
-	          state.check = crc32(state.check, input, copy, next);
+	          //=== CRC4(state.check, hold)
+	          hbuf[0] = hold & 0xff;
+	          hbuf[1] = (hold >>> 8) & 0xff;
+	          hbuf[2] = (hold >>> 16) & 0xff;
+	          hbuf[3] = (hold >>> 24) & 0xff;
+	          state.check = crc32(state.check, hbuf, 4, 0);
+	          //===
 	        }
-	        have -= copy;
-	        next += copy;
-	        if (len) { break inf_leave; }
-	      }
-	      else if (state.head) {
-	        state.head.name = null;
-	      }
-	      state.length = 0;
-	      state.mode = COMMENT;
-	      /* falls through */
-	    case COMMENT:
-	      if (state.flags & 0x1000) {
-	        if (have === 0) { break inf_leave; }
-	        copy = 0;
-	        do {
-	          len = input[next + copy++];
-	          /* use constant limit because in js we should not preallocate memory */
-	          if (state.head && len &&
-	              (state.length < 65536 /*state.head.comm_max*/)) {
-	            state.head.comment += String.fromCharCode(len);
-	          }
-	        } while (len && copy < have);
-	        if (state.flags & 0x0200) {
-	          state.check = crc32(state.check, input, copy, next);
-	        }
-	        have -= copy;
-	        next += copy;
-	        if (len) { break inf_leave; }
-	      }
-	      else if (state.head) {
-	        state.head.comment = null;
-	      }
-	      state.mode = HCRC;
-	      /* falls through */
-	    case HCRC:
-	      if (state.flags & 0x0200) {
+	        //=== INITBITS();
+	        hold = 0;
+	        bits = 0;
+	        //===//
+	        state.mode = OS;
+	        /* falls through */
+	      case OS:
 	        //=== NEEDBITS(16); */
 	        while (bits < 16) {
 	          if (have === 0) { break inf_leave; }
@@ -16245,201 +16260,213 @@ module.exports =
 	          bits += 8;
 	        }
 	        //===//
-	        if (hold !== (state.check & 0xffff)) {
-	          strm.msg = 'header crc mismatch';
-	          state.mode = BAD;
-	          break;
+	        if (state.head) {
+	          state.head.xflags = (hold & 0xff);
+	          state.head.os = (hold >> 8);
+	        }
+	        if (state.flags & 0x0200) {
+	          //=== CRC2(state.check, hold);
+	          hbuf[0] = hold & 0xff;
+	          hbuf[1] = (hold >>> 8) & 0xff;
+	          state.check = crc32(state.check, hbuf, 2, 0);
+	          //===//
 	        }
 	        //=== INITBITS();
 	        hold = 0;
 	        bits = 0;
 	        //===//
-	      }
-	      if (state.head) {
-	        state.head.hcrc = ((state.flags >> 9) & 1);
-	        state.head.done = true;
-	      }
-	      strm.adler = state.check = 0;
-	      state.mode = TYPE;
-	      break;
-	    case DICTID:
-	      //=== NEEDBITS(32); */
-	      while (bits < 32) {
-	        if (have === 0) { break inf_leave; }
-	        have--;
-	        hold += input[next++] << bits;
-	        bits += 8;
-	      }
-	      //===//
-	      strm.adler = state.check = zswap32(hold);
-	      //=== INITBITS();
-	      hold = 0;
-	      bits = 0;
-	      //===//
-	      state.mode = DICT;
-	      /* falls through */
-	    case DICT:
-	      if (state.havedict === 0) {
-	        //--- RESTORE() ---
-	        strm.next_out = put;
-	        strm.avail_out = left;
-	        strm.next_in = next;
-	        strm.avail_in = have;
-	        state.hold = hold;
-	        state.bits = bits;
-	        //---
-	        return Z_NEED_DICT;
-	      }
-	      strm.adler = state.check = 1/*adler32(0L, Z_NULL, 0)*/;
-	      state.mode = TYPE;
-	      /* falls through */
-	    case TYPE:
-	      if (flush === Z_BLOCK || flush === Z_TREES) { break inf_leave; }
-	      /* falls through */
-	    case TYPEDO:
-	      if (state.last) {
-	        //--- BYTEBITS() ---//
-	        hold >>>= bits & 7;
-	        bits -= bits & 7;
-	        //---//
-	        state.mode = CHECK;
-	        break;
-	      }
-	      //=== NEEDBITS(3); */
-	      while (bits < 3) {
-	        if (have === 0) { break inf_leave; }
-	        have--;
-	        hold += input[next++] << bits;
-	        bits += 8;
-	      }
-	      //===//
-	      state.last = (hold & 0x01)/*BITS(1)*/;
-	      //--- DROPBITS(1) ---//
-	      hold >>>= 1;
-	      bits -= 1;
-	      //---//
-	
-	      switch ((hold & 0x03)/*BITS(2)*/) {
-	      case 0:                             /* stored block */
-	        //Tracev((stderr, "inflate:     stored block%s\n",
-	        //        state.last ? " (last)" : ""));
-	        state.mode = STORED;
-	        break;
-	      case 1:                             /* fixed block */
-	        fixedtables(state);
-	        //Tracev((stderr, "inflate:     fixed codes block%s\n",
-	        //        state.last ? " (last)" : ""));
-	        state.mode = LEN_;             /* decode codes */
-	        if (flush === Z_TREES) {
-	          //--- DROPBITS(2) ---//
-	          hold >>>= 2;
-	          bits -= 2;
-	          //---//
-	          break inf_leave;
+	        state.mode = EXLEN;
+	        /* falls through */
+	      case EXLEN:
+	        if (state.flags & 0x0400) {
+	          //=== NEEDBITS(16); */
+	          while (bits < 16) {
+	            if (have === 0) { break inf_leave; }
+	            have--;
+	            hold += input[next++] << bits;
+	            bits += 8;
+	          }
+	          //===//
+	          state.length = hold;
+	          if (state.head) {
+	            state.head.extra_len = hold;
+	          }
+	          if (state.flags & 0x0200) {
+	            //=== CRC2(state.check, hold);
+	            hbuf[0] = hold & 0xff;
+	            hbuf[1] = (hold >>> 8) & 0xff;
+	            state.check = crc32(state.check, hbuf, 2, 0);
+	            //===//
+	          }
+	          //=== INITBITS();
+	          hold = 0;
+	          bits = 0;
+	          //===//
 	        }
+	        else if (state.head) {
+	          state.head.extra = null/*Z_NULL*/;
+	        }
+	        state.mode = EXTRA;
+	        /* falls through */
+	      case EXTRA:
+	        if (state.flags & 0x0400) {
+	          copy = state.length;
+	          if (copy > have) { copy = have; }
+	          if (copy) {
+	            if (state.head) {
+	              len = state.head.extra_len - state.length;
+	              if (!state.head.extra) {
+	                // Use untyped array for more convenient processing later
+	                state.head.extra = new Array(state.head.extra_len);
+	              }
+	              utils.arraySet(
+	                state.head.extra,
+	                input,
+	                next,
+	                // extra field is limited to 65536 bytes
+	                // - no need for additional size check
+	                copy,
+	                /*len + copy > state.head.extra_max - len ? state.head.extra_max : copy,*/
+	                len
+	              );
+	              //zmemcpy(state.head.extra + len, next,
+	              //        len + copy > state.head.extra_max ?
+	              //        state.head.extra_max - len : copy);
+	            }
+	            if (state.flags & 0x0200) {
+	              state.check = crc32(state.check, input, copy, next);
+	            }
+	            have -= copy;
+	            next += copy;
+	            state.length -= copy;
+	          }
+	          if (state.length) { break inf_leave; }
+	        }
+	        state.length = 0;
+	        state.mode = NAME;
+	        /* falls through */
+	      case NAME:
+	        if (state.flags & 0x0800) {
+	          if (have === 0) { break inf_leave; }
+	          copy = 0;
+	          do {
+	            // TODO: 2 or 1 bytes?
+	            len = input[next + copy++];
+	            /* use constant limit because in js we should not preallocate memory */
+	            if (state.head && len &&
+	                (state.length < 65536 /*state.head.name_max*/)) {
+	              state.head.name += String.fromCharCode(len);
+	            }
+	          } while (len && copy < have);
+	
+	          if (state.flags & 0x0200) {
+	            state.check = crc32(state.check, input, copy, next);
+	          }
+	          have -= copy;
+	          next += copy;
+	          if (len) { break inf_leave; }
+	        }
+	        else if (state.head) {
+	          state.head.name = null;
+	        }
+	        state.length = 0;
+	        state.mode = COMMENT;
+	        /* falls through */
+	      case COMMENT:
+	        if (state.flags & 0x1000) {
+	          if (have === 0) { break inf_leave; }
+	          copy = 0;
+	          do {
+	            len = input[next + copy++];
+	            /* use constant limit because in js we should not preallocate memory */
+	            if (state.head && len &&
+	                (state.length < 65536 /*state.head.comm_max*/)) {
+	              state.head.comment += String.fromCharCode(len);
+	            }
+	          } while (len && copy < have);
+	          if (state.flags & 0x0200) {
+	            state.check = crc32(state.check, input, copy, next);
+	          }
+	          have -= copy;
+	          next += copy;
+	          if (len) { break inf_leave; }
+	        }
+	        else if (state.head) {
+	          state.head.comment = null;
+	        }
+	        state.mode = HCRC;
+	        /* falls through */
+	      case HCRC:
+	        if (state.flags & 0x0200) {
+	          //=== NEEDBITS(16); */
+	          while (bits < 16) {
+	            if (have === 0) { break inf_leave; }
+	            have--;
+	            hold += input[next++] << bits;
+	            bits += 8;
+	          }
+	          //===//
+	          if (hold !== (state.check & 0xffff)) {
+	            strm.msg = 'header crc mismatch';
+	            state.mode = BAD;
+	            break;
+	          }
+	          //=== INITBITS();
+	          hold = 0;
+	          bits = 0;
+	          //===//
+	        }
+	        if (state.head) {
+	          state.head.hcrc = ((state.flags >> 9) & 1);
+	          state.head.done = true;
+	        }
+	        strm.adler = state.check = 0;
+	        state.mode = TYPE;
 	        break;
-	      case 2:                             /* dynamic block */
-	        //Tracev((stderr, "inflate:     dynamic codes block%s\n",
-	        //        state.last ? " (last)" : ""));
-	        state.mode = TABLE;
-	        break;
-	      case 3:
-	        strm.msg = 'invalid block type';
-	        state.mode = BAD;
-	      }
-	      //--- DROPBITS(2) ---//
-	      hold >>>= 2;
-	      bits -= 2;
-	      //---//
-	      break;
-	    case STORED:
-	      //--- BYTEBITS() ---// /* go to byte boundary */
-	      hold >>>= bits & 7;
-	      bits -= bits & 7;
-	      //---//
-	      //=== NEEDBITS(32); */
-	      while (bits < 32) {
-	        if (have === 0) { break inf_leave; }
-	        have--;
-	        hold += input[next++] << bits;
-	        bits += 8;
-	      }
-	      //===//
-	      if ((hold & 0xffff) !== ((hold >>> 16) ^ 0xffff)) {
-	        strm.msg = 'invalid stored block lengths';
-	        state.mode = BAD;
-	        break;
-	      }
-	      state.length = hold & 0xffff;
-	      //Tracev((stderr, "inflate:       stored length %u\n",
-	      //        state.length));
-	      //=== INITBITS();
-	      hold = 0;
-	      bits = 0;
-	      //===//
-	      state.mode = COPY_;
-	      if (flush === Z_TREES) { break inf_leave; }
-	      /* falls through */
-	    case COPY_:
-	      state.mode = COPY;
-	      /* falls through */
-	    case COPY:
-	      copy = state.length;
-	      if (copy) {
-	        if (copy > have) { copy = have; }
-	        if (copy > left) { copy = left; }
-	        if (copy === 0) { break inf_leave; }
-	        //--- zmemcpy(put, next, copy); ---
-	        utils.arraySet(output, input, next, copy, put);
-	        //---//
-	        have -= copy;
-	        next += copy;
-	        left -= copy;
-	        put += copy;
-	        state.length -= copy;
-	        break;
-	      }
-	      //Tracev((stderr, "inflate:       stored end\n"));
-	      state.mode = TYPE;
-	      break;
-	    case TABLE:
-	      //=== NEEDBITS(14); */
-	      while (bits < 14) {
-	        if (have === 0) { break inf_leave; }
-	        have--;
-	        hold += input[next++] << bits;
-	        bits += 8;
-	      }
-	      //===//
-	      state.nlen = (hold & 0x1f)/*BITS(5)*/ + 257;
-	      //--- DROPBITS(5) ---//
-	      hold >>>= 5;
-	      bits -= 5;
-	      //---//
-	      state.ndist = (hold & 0x1f)/*BITS(5)*/ + 1;
-	      //--- DROPBITS(5) ---//
-	      hold >>>= 5;
-	      bits -= 5;
-	      //---//
-	      state.ncode = (hold & 0x0f)/*BITS(4)*/ + 4;
-	      //--- DROPBITS(4) ---//
-	      hold >>>= 4;
-	      bits -= 4;
-	      //---//
-	//#ifndef PKZIP_BUG_WORKAROUND
-	      if (state.nlen > 286 || state.ndist > 30) {
-	        strm.msg = 'too many length or distance symbols';
-	        state.mode = BAD;
-	        break;
-	      }
-	//#endif
-	      //Tracev((stderr, "inflate:       table sizes ok\n"));
-	      state.have = 0;
-	      state.mode = LENLENS;
-	      /* falls through */
-	    case LENLENS:
-	      while (state.have < state.ncode) {
-	        //=== NEEDBITS(3);
+	      case DICTID:
+	        //=== NEEDBITS(32); */
+	        while (bits < 32) {
+	          if (have === 0) { break inf_leave; }
+	          have--;
+	          hold += input[next++] << bits;
+	          bits += 8;
+	        }
+	        //===//
+	        strm.adler = state.check = zswap32(hold);
+	        //=== INITBITS();
+	        hold = 0;
+	        bits = 0;
+	        //===//
+	        state.mode = DICT;
+	        /* falls through */
+	      case DICT:
+	        if (state.havedict === 0) {
+	          //--- RESTORE() ---
+	          strm.next_out = put;
+	          strm.avail_out = left;
+	          strm.next_in = next;
+	          strm.avail_in = have;
+	          state.hold = hold;
+	          state.bits = bits;
+	          //---
+	          return Z_NEED_DICT;
+	        }
+	        strm.adler = state.check = 1/*adler32(0L, Z_NULL, 0)*/;
+	        state.mode = TYPE;
+	        /* falls through */
+	      case TYPE:
+	        if (flush === Z_BLOCK || flush === Z_TREES) { break inf_leave; }
+	        /* falls through */
+	      case TYPEDO:
+	        if (state.last) {
+	          //--- BYTEBITS() ---//
+	          hold >>>= bits & 7;
+	          bits -= bits & 7;
+	          //---//
+	          state.mode = CHECK;
+	          break;
+	        }
+	        //=== NEEDBITS(3); */
 	        while (bits < 3) {
 	          if (have === 0) { break inf_leave; }
 	          have--;
@@ -16447,39 +16474,442 @@ module.exports =
 	          bits += 8;
 	        }
 	        //===//
-	        state.lens[order[state.have++]] = (hold & 0x07);//BITS(3);
-	        //--- DROPBITS(3) ---//
-	        hold >>>= 3;
-	        bits -= 3;
+	        state.last = (hold & 0x01)/*BITS(1)*/;
+	        //--- DROPBITS(1) ---//
+	        hold >>>= 1;
+	        bits -= 1;
 	        //---//
-	      }
-	      while (state.have < 19) {
-	        state.lens[order[state.have++]] = 0;
-	      }
-	      // We have separate tables & no pointers. 2 commented lines below not needed.
-	      //state.next = state.codes;
-	      //state.lencode = state.next;
-	      // Switch to use dynamic table
-	      state.lencode = state.lendyn;
-	      state.lenbits = 7;
 	
-	      opts = { bits: state.lenbits };
-	      ret = inflate_table(CODES, state.lens, 0, 19, state.lencode, 0, state.work, opts);
-	      state.lenbits = opts.bits;
-	
-	      if (ret) {
-	        strm.msg = 'invalid code lengths set';
-	        state.mode = BAD;
+	        switch ((hold & 0x03)/*BITS(2)*/) {
+	          case 0:                             /* stored block */
+	            //Tracev((stderr, "inflate:     stored block%s\n",
+	            //        state.last ? " (last)" : ""));
+	            state.mode = STORED;
+	            break;
+	          case 1:                             /* fixed block */
+	            fixedtables(state);
+	            //Tracev((stderr, "inflate:     fixed codes block%s\n",
+	            //        state.last ? " (last)" : ""));
+	            state.mode = LEN_;             /* decode codes */
+	            if (flush === Z_TREES) {
+	              //--- DROPBITS(2) ---//
+	              hold >>>= 2;
+	              bits -= 2;
+	              //---//
+	              break inf_leave;
+	            }
+	            break;
+	          case 2:                             /* dynamic block */
+	            //Tracev((stderr, "inflate:     dynamic codes block%s\n",
+	            //        state.last ? " (last)" : ""));
+	            state.mode = TABLE;
+	            break;
+	          case 3:
+	            strm.msg = 'invalid block type';
+	            state.mode = BAD;
+	        }
+	        //--- DROPBITS(2) ---//
+	        hold >>>= 2;
+	        bits -= 2;
+	        //---//
 	        break;
-	      }
-	      //Tracev((stderr, "inflate:       code lengths ok\n"));
-	      state.have = 0;
-	      state.mode = CODELENS;
-	      /* falls through */
-	    case CODELENS:
-	      while (state.have < state.nlen + state.ndist) {
+	      case STORED:
+	        //--- BYTEBITS() ---// /* go to byte boundary */
+	        hold >>>= bits & 7;
+	        bits -= bits & 7;
+	        //---//
+	        //=== NEEDBITS(32); */
+	        while (bits < 32) {
+	          if (have === 0) { break inf_leave; }
+	          have--;
+	          hold += input[next++] << bits;
+	          bits += 8;
+	        }
+	        //===//
+	        if ((hold & 0xffff) !== ((hold >>> 16) ^ 0xffff)) {
+	          strm.msg = 'invalid stored block lengths';
+	          state.mode = BAD;
+	          break;
+	        }
+	        state.length = hold & 0xffff;
+	        //Tracev((stderr, "inflate:       stored length %u\n",
+	        //        state.length));
+	        //=== INITBITS();
+	        hold = 0;
+	        bits = 0;
+	        //===//
+	        state.mode = COPY_;
+	        if (flush === Z_TREES) { break inf_leave; }
+	        /* falls through */
+	      case COPY_:
+	        state.mode = COPY;
+	        /* falls through */
+	      case COPY:
+	        copy = state.length;
+	        if (copy) {
+	          if (copy > have) { copy = have; }
+	          if (copy > left) { copy = left; }
+	          if (copy === 0) { break inf_leave; }
+	          //--- zmemcpy(put, next, copy); ---
+	          utils.arraySet(output, input, next, copy, put);
+	          //---//
+	          have -= copy;
+	          next += copy;
+	          left -= copy;
+	          put += copy;
+	          state.length -= copy;
+	          break;
+	        }
+	        //Tracev((stderr, "inflate:       stored end\n"));
+	        state.mode = TYPE;
+	        break;
+	      case TABLE:
+	        //=== NEEDBITS(14); */
+	        while (bits < 14) {
+	          if (have === 0) { break inf_leave; }
+	          have--;
+	          hold += input[next++] << bits;
+	          bits += 8;
+	        }
+	        //===//
+	        state.nlen = (hold & 0x1f)/*BITS(5)*/ + 257;
+	        //--- DROPBITS(5) ---//
+	        hold >>>= 5;
+	        bits -= 5;
+	        //---//
+	        state.ndist = (hold & 0x1f)/*BITS(5)*/ + 1;
+	        //--- DROPBITS(5) ---//
+	        hold >>>= 5;
+	        bits -= 5;
+	        //---//
+	        state.ncode = (hold & 0x0f)/*BITS(4)*/ + 4;
+	        //--- DROPBITS(4) ---//
+	        hold >>>= 4;
+	        bits -= 4;
+	        //---//
+	//#ifndef PKZIP_BUG_WORKAROUND
+	        if (state.nlen > 286 || state.ndist > 30) {
+	          strm.msg = 'too many length or distance symbols';
+	          state.mode = BAD;
+	          break;
+	        }
+	//#endif
+	        //Tracev((stderr, "inflate:       table sizes ok\n"));
+	        state.have = 0;
+	        state.mode = LENLENS;
+	        /* falls through */
+	      case LENLENS:
+	        while (state.have < state.ncode) {
+	          //=== NEEDBITS(3);
+	          while (bits < 3) {
+	            if (have === 0) { break inf_leave; }
+	            have--;
+	            hold += input[next++] << bits;
+	            bits += 8;
+	          }
+	          //===//
+	          state.lens[order[state.have++]] = (hold & 0x07);//BITS(3);
+	          //--- DROPBITS(3) ---//
+	          hold >>>= 3;
+	          bits -= 3;
+	          //---//
+	        }
+	        while (state.have < 19) {
+	          state.lens[order[state.have++]] = 0;
+	        }
+	        // We have separate tables & no pointers. 2 commented lines below not needed.
+	        //state.next = state.codes;
+	        //state.lencode = state.next;
+	        // Switch to use dynamic table
+	        state.lencode = state.lendyn;
+	        state.lenbits = 7;
+	
+	        opts = { bits: state.lenbits };
+	        ret = inflate_table(CODES, state.lens, 0, 19, state.lencode, 0, state.work, opts);
+	        state.lenbits = opts.bits;
+	
+	        if (ret) {
+	          strm.msg = 'invalid code lengths set';
+	          state.mode = BAD;
+	          break;
+	        }
+	        //Tracev((stderr, "inflate:       code lengths ok\n"));
+	        state.have = 0;
+	        state.mode = CODELENS;
+	        /* falls through */
+	      case CODELENS:
+	        while (state.have < state.nlen + state.ndist) {
+	          for (;;) {
+	            here = state.lencode[hold & ((1 << state.lenbits) - 1)];/*BITS(state.lenbits)*/
+	            here_bits = here >>> 24;
+	            here_op = (here >>> 16) & 0xff;
+	            here_val = here & 0xffff;
+	
+	            if ((here_bits) <= bits) { break; }
+	            //--- PULLBYTE() ---//
+	            if (have === 0) { break inf_leave; }
+	            have--;
+	            hold += input[next++] << bits;
+	            bits += 8;
+	            //---//
+	          }
+	          if (here_val < 16) {
+	            //--- DROPBITS(here.bits) ---//
+	            hold >>>= here_bits;
+	            bits -= here_bits;
+	            //---//
+	            state.lens[state.have++] = here_val;
+	          }
+	          else {
+	            if (here_val === 16) {
+	              //=== NEEDBITS(here.bits + 2);
+	              n = here_bits + 2;
+	              while (bits < n) {
+	                if (have === 0) { break inf_leave; }
+	                have--;
+	                hold += input[next++] << bits;
+	                bits += 8;
+	              }
+	              //===//
+	              //--- DROPBITS(here.bits) ---//
+	              hold >>>= here_bits;
+	              bits -= here_bits;
+	              //---//
+	              if (state.have === 0) {
+	                strm.msg = 'invalid bit length repeat';
+	                state.mode = BAD;
+	                break;
+	              }
+	              len = state.lens[state.have - 1];
+	              copy = 3 + (hold & 0x03);//BITS(2);
+	              //--- DROPBITS(2) ---//
+	              hold >>>= 2;
+	              bits -= 2;
+	              //---//
+	            }
+	            else if (here_val === 17) {
+	              //=== NEEDBITS(here.bits + 3);
+	              n = here_bits + 3;
+	              while (bits < n) {
+	                if (have === 0) { break inf_leave; }
+	                have--;
+	                hold += input[next++] << bits;
+	                bits += 8;
+	              }
+	              //===//
+	              //--- DROPBITS(here.bits) ---//
+	              hold >>>= here_bits;
+	              bits -= here_bits;
+	              //---//
+	              len = 0;
+	              copy = 3 + (hold & 0x07);//BITS(3);
+	              //--- DROPBITS(3) ---//
+	              hold >>>= 3;
+	              bits -= 3;
+	              //---//
+	            }
+	            else {
+	              //=== NEEDBITS(here.bits + 7);
+	              n = here_bits + 7;
+	              while (bits < n) {
+	                if (have === 0) { break inf_leave; }
+	                have--;
+	                hold += input[next++] << bits;
+	                bits += 8;
+	              }
+	              //===//
+	              //--- DROPBITS(here.bits) ---//
+	              hold >>>= here_bits;
+	              bits -= here_bits;
+	              //---//
+	              len = 0;
+	              copy = 11 + (hold & 0x7f);//BITS(7);
+	              //--- DROPBITS(7) ---//
+	              hold >>>= 7;
+	              bits -= 7;
+	              //---//
+	            }
+	            if (state.have + copy > state.nlen + state.ndist) {
+	              strm.msg = 'invalid bit length repeat';
+	              state.mode = BAD;
+	              break;
+	            }
+	            while (copy--) {
+	              state.lens[state.have++] = len;
+	            }
+	          }
+	        }
+	
+	        /* handle error breaks in while */
+	        if (state.mode === BAD) { break; }
+	
+	        /* check for end-of-block code (better have one) */
+	        if (state.lens[256] === 0) {
+	          strm.msg = 'invalid code -- missing end-of-block';
+	          state.mode = BAD;
+	          break;
+	        }
+	
+	        /* build code tables -- note: do not change the lenbits or distbits
+	           values here (9 and 6) without reading the comments in inftrees.h
+	           concerning the ENOUGH constants, which depend on those values */
+	        state.lenbits = 9;
+	
+	        opts = { bits: state.lenbits };
+	        ret = inflate_table(LENS, state.lens, 0, state.nlen, state.lencode, 0, state.work, opts);
+	        // We have separate tables & no pointers. 2 commented lines below not needed.
+	        // state.next_index = opts.table_index;
+	        state.lenbits = opts.bits;
+	        // state.lencode = state.next;
+	
+	        if (ret) {
+	          strm.msg = 'invalid literal/lengths set';
+	          state.mode = BAD;
+	          break;
+	        }
+	
+	        state.distbits = 6;
+	        //state.distcode.copy(state.codes);
+	        // Switch to use dynamic table
+	        state.distcode = state.distdyn;
+	        opts = { bits: state.distbits };
+	        ret = inflate_table(DISTS, state.lens, state.nlen, state.ndist, state.distcode, 0, state.work, opts);
+	        // We have separate tables & no pointers. 2 commented lines below not needed.
+	        // state.next_index = opts.table_index;
+	        state.distbits = opts.bits;
+	        // state.distcode = state.next;
+	
+	        if (ret) {
+	          strm.msg = 'invalid distances set';
+	          state.mode = BAD;
+	          break;
+	        }
+	        //Tracev((stderr, 'inflate:       codes ok\n'));
+	        state.mode = LEN_;
+	        if (flush === Z_TREES) { break inf_leave; }
+	        /* falls through */
+	      case LEN_:
+	        state.mode = LEN;
+	        /* falls through */
+	      case LEN:
+	        if (have >= 6 && left >= 258) {
+	          //--- RESTORE() ---
+	          strm.next_out = put;
+	          strm.avail_out = left;
+	          strm.next_in = next;
+	          strm.avail_in = have;
+	          state.hold = hold;
+	          state.bits = bits;
+	          //---
+	          inflate_fast(strm, _out);
+	          //--- LOAD() ---
+	          put = strm.next_out;
+	          output = strm.output;
+	          left = strm.avail_out;
+	          next = strm.next_in;
+	          input = strm.input;
+	          have = strm.avail_in;
+	          hold = state.hold;
+	          bits = state.bits;
+	          //---
+	
+	          if (state.mode === TYPE) {
+	            state.back = -1;
+	          }
+	          break;
+	        }
+	        state.back = 0;
 	        for (;;) {
-	          here = state.lencode[hold & ((1 << state.lenbits) - 1)];/*BITS(state.lenbits)*/
+	          here = state.lencode[hold & ((1 << state.lenbits) - 1)];  /*BITS(state.lenbits)*/
+	          here_bits = here >>> 24;
+	          here_op = (here >>> 16) & 0xff;
+	          here_val = here & 0xffff;
+	
+	          if (here_bits <= bits) { break; }
+	          //--- PULLBYTE() ---//
+	          if (have === 0) { break inf_leave; }
+	          have--;
+	          hold += input[next++] << bits;
+	          bits += 8;
+	          //---//
+	        }
+	        if (here_op && (here_op & 0xf0) === 0) {
+	          last_bits = here_bits;
+	          last_op = here_op;
+	          last_val = here_val;
+	          for (;;) {
+	            here = state.lencode[last_val +
+	                    ((hold & ((1 << (last_bits + last_op)) - 1))/*BITS(last.bits + last.op)*/ >> last_bits)];
+	            here_bits = here >>> 24;
+	            here_op = (here >>> 16) & 0xff;
+	            here_val = here & 0xffff;
+	
+	            if ((last_bits + here_bits) <= bits) { break; }
+	            //--- PULLBYTE() ---//
+	            if (have === 0) { break inf_leave; }
+	            have--;
+	            hold += input[next++] << bits;
+	            bits += 8;
+	            //---//
+	          }
+	          //--- DROPBITS(last.bits) ---//
+	          hold >>>= last_bits;
+	          bits -= last_bits;
+	          //---//
+	          state.back += last_bits;
+	        }
+	        //--- DROPBITS(here.bits) ---//
+	        hold >>>= here_bits;
+	        bits -= here_bits;
+	        //---//
+	        state.back += here_bits;
+	        state.length = here_val;
+	        if (here_op === 0) {
+	          //Tracevv((stderr, here.val >= 0x20 && here.val < 0x7f ?
+	          //        "inflate:         literal '%c'\n" :
+	          //        "inflate:         literal 0x%02x\n", here.val));
+	          state.mode = LIT;
+	          break;
+	        }
+	        if (here_op & 32) {
+	          //Tracevv((stderr, "inflate:         end of block\n"));
+	          state.back = -1;
+	          state.mode = TYPE;
+	          break;
+	        }
+	        if (here_op & 64) {
+	          strm.msg = 'invalid literal/length code';
+	          state.mode = BAD;
+	          break;
+	        }
+	        state.extra = here_op & 15;
+	        state.mode = LENEXT;
+	        /* falls through */
+	      case LENEXT:
+	        if (state.extra) {
+	          //=== NEEDBITS(state.extra);
+	          n = state.extra;
+	          while (bits < n) {
+	            if (have === 0) { break inf_leave; }
+	            have--;
+	            hold += input[next++] << bits;
+	            bits += 8;
+	          }
+	          //===//
+	          state.length += hold & ((1 << state.extra) - 1)/*BITS(state.extra)*/;
+	          //--- DROPBITS(state.extra) ---//
+	          hold >>>= state.extra;
+	          bits -= state.extra;
+	          //---//
+	          state.back += state.extra;
+	        }
+	        //Tracevv((stderr, "inflate:         length %u\n", state.length));
+	        state.was = state.length;
+	        state.mode = DIST;
+	        /* falls through */
+	      case DIST:
+	        for (;;) {
+	          here = state.distcode[hold & ((1 << state.distbits) - 1)];/*BITS(state.distbits)*/
 	          here_bits = here >>> 24;
 	          here_op = (here >>> 16) & 0xff;
 	          here_val = here & 0xffff;
@@ -16492,354 +16922,85 @@ module.exports =
 	          bits += 8;
 	          //---//
 	        }
-	        if (here_val < 16) {
-	          //--- DROPBITS(here.bits) ---//
-	          hold >>>= here_bits;
-	          bits -= here_bits;
-	          //---//
-	          state.lens[state.have++] = here_val;
-	        }
-	        else {
-	          if (here_val === 16) {
-	            //=== NEEDBITS(here.bits + 2);
-	            n = here_bits + 2;
-	            while (bits < n) {
-	              if (have === 0) { break inf_leave; }
-	              have--;
-	              hold += input[next++] << bits;
-	              bits += 8;
-	            }
-	            //===//
-	            //--- DROPBITS(here.bits) ---//
-	            hold >>>= here_bits;
-	            bits -= here_bits;
+	        if ((here_op & 0xf0) === 0) {
+	          last_bits = here_bits;
+	          last_op = here_op;
+	          last_val = here_val;
+	          for (;;) {
+	            here = state.distcode[last_val +
+	                    ((hold & ((1 << (last_bits + last_op)) - 1))/*BITS(last.bits + last.op)*/ >> last_bits)];
+	            here_bits = here >>> 24;
+	            here_op = (here >>> 16) & 0xff;
+	            here_val = here & 0xffff;
+	
+	            if ((last_bits + here_bits) <= bits) { break; }
+	            //--- PULLBYTE() ---//
+	            if (have === 0) { break inf_leave; }
+	            have--;
+	            hold += input[next++] << bits;
+	            bits += 8;
 	            //---//
-	            if (state.have === 0) {
-	              strm.msg = 'invalid bit length repeat';
+	          }
+	          //--- DROPBITS(last.bits) ---//
+	          hold >>>= last_bits;
+	          bits -= last_bits;
+	          //---//
+	          state.back += last_bits;
+	        }
+	        //--- DROPBITS(here.bits) ---//
+	        hold >>>= here_bits;
+	        bits -= here_bits;
+	        //---//
+	        state.back += here_bits;
+	        if (here_op & 64) {
+	          strm.msg = 'invalid distance code';
+	          state.mode = BAD;
+	          break;
+	        }
+	        state.offset = here_val;
+	        state.extra = (here_op) & 15;
+	        state.mode = DISTEXT;
+	        /* falls through */
+	      case DISTEXT:
+	        if (state.extra) {
+	          //=== NEEDBITS(state.extra);
+	          n = state.extra;
+	          while (bits < n) {
+	            if (have === 0) { break inf_leave; }
+	            have--;
+	            hold += input[next++] << bits;
+	            bits += 8;
+	          }
+	          //===//
+	          state.offset += hold & ((1 << state.extra) - 1)/*BITS(state.extra)*/;
+	          //--- DROPBITS(state.extra) ---//
+	          hold >>>= state.extra;
+	          bits -= state.extra;
+	          //---//
+	          state.back += state.extra;
+	        }
+	//#ifdef INFLATE_STRICT
+	        if (state.offset > state.dmax) {
+	          strm.msg = 'invalid distance too far back';
+	          state.mode = BAD;
+	          break;
+	        }
+	//#endif
+	        //Tracevv((stderr, "inflate:         distance %u\n", state.offset));
+	        state.mode = MATCH;
+	        /* falls through */
+	      case MATCH:
+	        if (left === 0) { break inf_leave; }
+	        copy = _out - left;
+	        if (state.offset > copy) {         /* copy from window */
+	          copy = state.offset - copy;
+	          if (copy > state.whave) {
+	            if (state.sane) {
+	              strm.msg = 'invalid distance too far back';
 	              state.mode = BAD;
 	              break;
 	            }
-	            len = state.lens[state.have - 1];
-	            copy = 3 + (hold & 0x03);//BITS(2);
-	            //--- DROPBITS(2) ---//
-	            hold >>>= 2;
-	            bits -= 2;
-	            //---//
-	          }
-	          else if (here_val === 17) {
-	            //=== NEEDBITS(here.bits + 3);
-	            n = here_bits + 3;
-	            while (bits < n) {
-	              if (have === 0) { break inf_leave; }
-	              have--;
-	              hold += input[next++] << bits;
-	              bits += 8;
-	            }
-	            //===//
-	            //--- DROPBITS(here.bits) ---//
-	            hold >>>= here_bits;
-	            bits -= here_bits;
-	            //---//
-	            len = 0;
-	            copy = 3 + (hold & 0x07);//BITS(3);
-	            //--- DROPBITS(3) ---//
-	            hold >>>= 3;
-	            bits -= 3;
-	            //---//
-	          }
-	          else {
-	            //=== NEEDBITS(here.bits + 7);
-	            n = here_bits + 7;
-	            while (bits < n) {
-	              if (have === 0) { break inf_leave; }
-	              have--;
-	              hold += input[next++] << bits;
-	              bits += 8;
-	            }
-	            //===//
-	            //--- DROPBITS(here.bits) ---//
-	            hold >>>= here_bits;
-	            bits -= here_bits;
-	            //---//
-	            len = 0;
-	            copy = 11 + (hold & 0x7f);//BITS(7);
-	            //--- DROPBITS(7) ---//
-	            hold >>>= 7;
-	            bits -= 7;
-	            //---//
-	          }
-	          if (state.have + copy > state.nlen + state.ndist) {
-	            strm.msg = 'invalid bit length repeat';
-	            state.mode = BAD;
-	            break;
-	          }
-	          while (copy--) {
-	            state.lens[state.have++] = len;
-	          }
-	        }
-	      }
-	
-	      /* handle error breaks in while */
-	      if (state.mode === BAD) { break; }
-	
-	      /* check for end-of-block code (better have one) */
-	      if (state.lens[256] === 0) {
-	        strm.msg = 'invalid code -- missing end-of-block';
-	        state.mode = BAD;
-	        break;
-	      }
-	
-	      /* build code tables -- note: do not change the lenbits or distbits
-	         values here (9 and 6) without reading the comments in inftrees.h
-	         concerning the ENOUGH constants, which depend on those values */
-	      state.lenbits = 9;
-	
-	      opts = { bits: state.lenbits };
-	      ret = inflate_table(LENS, state.lens, 0, state.nlen, state.lencode, 0, state.work, opts);
-	      // We have separate tables & no pointers. 2 commented lines below not needed.
-	      // state.next_index = opts.table_index;
-	      state.lenbits = opts.bits;
-	      // state.lencode = state.next;
-	
-	      if (ret) {
-	        strm.msg = 'invalid literal/lengths set';
-	        state.mode = BAD;
-	        break;
-	      }
-	
-	      state.distbits = 6;
-	      //state.distcode.copy(state.codes);
-	      // Switch to use dynamic table
-	      state.distcode = state.distdyn;
-	      opts = { bits: state.distbits };
-	      ret = inflate_table(DISTS, state.lens, state.nlen, state.ndist, state.distcode, 0, state.work, opts);
-	      // We have separate tables & no pointers. 2 commented lines below not needed.
-	      // state.next_index = opts.table_index;
-	      state.distbits = opts.bits;
-	      // state.distcode = state.next;
-	
-	      if (ret) {
-	        strm.msg = 'invalid distances set';
-	        state.mode = BAD;
-	        break;
-	      }
-	      //Tracev((stderr, 'inflate:       codes ok\n'));
-	      state.mode = LEN_;
-	      if (flush === Z_TREES) { break inf_leave; }
-	      /* falls through */
-	    case LEN_:
-	      state.mode = LEN;
-	      /* falls through */
-	    case LEN:
-	      if (have >= 6 && left >= 258) {
-	        //--- RESTORE() ---
-	        strm.next_out = put;
-	        strm.avail_out = left;
-	        strm.next_in = next;
-	        strm.avail_in = have;
-	        state.hold = hold;
-	        state.bits = bits;
-	        //---
-	        inflate_fast(strm, _out);
-	        //--- LOAD() ---
-	        put = strm.next_out;
-	        output = strm.output;
-	        left = strm.avail_out;
-	        next = strm.next_in;
-	        input = strm.input;
-	        have = strm.avail_in;
-	        hold = state.hold;
-	        bits = state.bits;
-	        //---
-	
-	        if (state.mode === TYPE) {
-	          state.back = -1;
-	        }
-	        break;
-	      }
-	      state.back = 0;
-	      for (;;) {
-	        here = state.lencode[hold & ((1 << state.lenbits) - 1)];  /*BITS(state.lenbits)*/
-	        here_bits = here >>> 24;
-	        here_op = (here >>> 16) & 0xff;
-	        here_val = here & 0xffff;
-	
-	        if (here_bits <= bits) { break; }
-	        //--- PULLBYTE() ---//
-	        if (have === 0) { break inf_leave; }
-	        have--;
-	        hold += input[next++] << bits;
-	        bits += 8;
-	        //---//
-	      }
-	      if (here_op && (here_op & 0xf0) === 0) {
-	        last_bits = here_bits;
-	        last_op = here_op;
-	        last_val = here_val;
-	        for (;;) {
-	          here = state.lencode[last_val +
-	                  ((hold & ((1 << (last_bits + last_op)) - 1))/*BITS(last.bits + last.op)*/ >> last_bits)];
-	          here_bits = here >>> 24;
-	          here_op = (here >>> 16) & 0xff;
-	          here_val = here & 0xffff;
-	
-	          if ((last_bits + here_bits) <= bits) { break; }
-	          //--- PULLBYTE() ---//
-	          if (have === 0) { break inf_leave; }
-	          have--;
-	          hold += input[next++] << bits;
-	          bits += 8;
-	          //---//
-	        }
-	        //--- DROPBITS(last.bits) ---//
-	        hold >>>= last_bits;
-	        bits -= last_bits;
-	        //---//
-	        state.back += last_bits;
-	      }
-	      //--- DROPBITS(here.bits) ---//
-	      hold >>>= here_bits;
-	      bits -= here_bits;
-	      //---//
-	      state.back += here_bits;
-	      state.length = here_val;
-	      if (here_op === 0) {
-	        //Tracevv((stderr, here.val >= 0x20 && here.val < 0x7f ?
-	        //        "inflate:         literal '%c'\n" :
-	        //        "inflate:         literal 0x%02x\n", here.val));
-	        state.mode = LIT;
-	        break;
-	      }
-	      if (here_op & 32) {
-	        //Tracevv((stderr, "inflate:         end of block\n"));
-	        state.back = -1;
-	        state.mode = TYPE;
-	        break;
-	      }
-	      if (here_op & 64) {
-	        strm.msg = 'invalid literal/length code';
-	        state.mode = BAD;
-	        break;
-	      }
-	      state.extra = here_op & 15;
-	      state.mode = LENEXT;
-	      /* falls through */
-	    case LENEXT:
-	      if (state.extra) {
-	        //=== NEEDBITS(state.extra);
-	        n = state.extra;
-	        while (bits < n) {
-	          if (have === 0) { break inf_leave; }
-	          have--;
-	          hold += input[next++] << bits;
-	          bits += 8;
-	        }
-	        //===//
-	        state.length += hold & ((1 << state.extra) - 1)/*BITS(state.extra)*/;
-	        //--- DROPBITS(state.extra) ---//
-	        hold >>>= state.extra;
-	        bits -= state.extra;
-	        //---//
-	        state.back += state.extra;
-	      }
-	      //Tracevv((stderr, "inflate:         length %u\n", state.length));
-	      state.was = state.length;
-	      state.mode = DIST;
-	      /* falls through */
-	    case DIST:
-	      for (;;) {
-	        here = state.distcode[hold & ((1 << state.distbits) - 1)];/*BITS(state.distbits)*/
-	        here_bits = here >>> 24;
-	        here_op = (here >>> 16) & 0xff;
-	        here_val = here & 0xffff;
-	
-	        if ((here_bits) <= bits) { break; }
-	        //--- PULLBYTE() ---//
-	        if (have === 0) { break inf_leave; }
-	        have--;
-	        hold += input[next++] << bits;
-	        bits += 8;
-	        //---//
-	      }
-	      if ((here_op & 0xf0) === 0) {
-	        last_bits = here_bits;
-	        last_op = here_op;
-	        last_val = here_val;
-	        for (;;) {
-	          here = state.distcode[last_val +
-	                  ((hold & ((1 << (last_bits + last_op)) - 1))/*BITS(last.bits + last.op)*/ >> last_bits)];
-	          here_bits = here >>> 24;
-	          here_op = (here >>> 16) & 0xff;
-	          here_val = here & 0xffff;
-	
-	          if ((last_bits + here_bits) <= bits) { break; }
-	          //--- PULLBYTE() ---//
-	          if (have === 0) { break inf_leave; }
-	          have--;
-	          hold += input[next++] << bits;
-	          bits += 8;
-	          //---//
-	        }
-	        //--- DROPBITS(last.bits) ---//
-	        hold >>>= last_bits;
-	        bits -= last_bits;
-	        //---//
-	        state.back += last_bits;
-	      }
-	      //--- DROPBITS(here.bits) ---//
-	      hold >>>= here_bits;
-	      bits -= here_bits;
-	      //---//
-	      state.back += here_bits;
-	      if (here_op & 64) {
-	        strm.msg = 'invalid distance code';
-	        state.mode = BAD;
-	        break;
-	      }
-	      state.offset = here_val;
-	      state.extra = (here_op) & 15;
-	      state.mode = DISTEXT;
-	      /* falls through */
-	    case DISTEXT:
-	      if (state.extra) {
-	        //=== NEEDBITS(state.extra);
-	        n = state.extra;
-	        while (bits < n) {
-	          if (have === 0) { break inf_leave; }
-	          have--;
-	          hold += input[next++] << bits;
-	          bits += 8;
-	        }
-	        //===//
-	        state.offset += hold & ((1 << state.extra) - 1)/*BITS(state.extra)*/;
-	        //--- DROPBITS(state.extra) ---//
-	        hold >>>= state.extra;
-	        bits -= state.extra;
-	        //---//
-	        state.back += state.extra;
-	      }
-	//#ifdef INFLATE_STRICT
-	      if (state.offset > state.dmax) {
-	        strm.msg = 'invalid distance too far back';
-	        state.mode = BAD;
-	        break;
-	      }
-	//#endif
-	      //Tracevv((stderr, "inflate:         distance %u\n", state.offset));
-	      state.mode = MATCH;
-	      /* falls through */
-	    case MATCH:
-	      if (left === 0) { break inf_leave; }
-	      copy = _out - left;
-	      if (state.offset > copy) {         /* copy from window */
-	        copy = state.offset - copy;
-	        if (copy > state.whave) {
-	          if (state.sane) {
-	            strm.msg = 'invalid distance too far back';
-	            state.mode = BAD;
-	            break;
-	          }
-	// (!) This block is disabled in zlib defailts,
+	// (!) This block is disabled in zlib defaults,
 	// don't enable it for binary compatibility
 	//#ifdef INFLATE_ALLOW_INVALID_DISTANCE_TOOFAR_ARRR
 	//          Trace((stderr, "inflate.c too far\n"));
@@ -16854,106 +17015,106 @@ module.exports =
 	//          if (state.length === 0) { state.mode = LEN; }
 	//          break;
 	//#endif
+	          }
+	          if (copy > state.wnext) {
+	            copy -= state.wnext;
+	            from = state.wsize - copy;
+	          }
+	          else {
+	            from = state.wnext - copy;
+	          }
+	          if (copy > state.length) { copy = state.length; }
+	          from_source = state.window;
 	        }
-	        if (copy > state.wnext) {
-	          copy -= state.wnext;
-	          from = state.wsize - copy;
+	        else {                              /* copy from output */
+	          from_source = output;
+	          from = put - state.offset;
+	          copy = state.length;
 	        }
-	        else {
-	          from = state.wnext - copy;
-	        }
-	        if (copy > state.length) { copy = state.length; }
-	        from_source = state.window;
-	      }
-	      else {                              /* copy from output */
-	        from_source = output;
-	        from = put - state.offset;
-	        copy = state.length;
-	      }
-	      if (copy > left) { copy = left; }
-	      left -= copy;
-	      state.length -= copy;
-	      do {
-	        output[put++] = from_source[from++];
-	      } while (--copy);
-	      if (state.length === 0) { state.mode = LEN; }
-	      break;
-	    case LIT:
-	      if (left === 0) { break inf_leave; }
-	      output[put++] = state.length;
-	      left--;
-	      state.mode = LEN;
-	      break;
-	    case CHECK:
-	      if (state.wrap) {
-	        //=== NEEDBITS(32);
-	        while (bits < 32) {
-	          if (have === 0) { break inf_leave; }
-	          have--;
-	          // Use '|' insdead of '+' to make sure that result is signed
-	          hold |= input[next++] << bits;
-	          bits += 8;
-	        }
-	        //===//
-	        _out -= left;
-	        strm.total_out += _out;
-	        state.total += _out;
-	        if (_out) {
-	          strm.adler = state.check =
-	              /*UPDATE(state.check, put - _out, _out);*/
-	              (state.flags ? crc32(state.check, output, _out, put - _out) : adler32(state.check, output, _out, put - _out));
+	        if (copy > left) { copy = left; }
+	        left -= copy;
+	        state.length -= copy;
+	        do {
+	          output[put++] = from_source[from++];
+	        } while (--copy);
+	        if (state.length === 0) { state.mode = LEN; }
+	        break;
+	      case LIT:
+	        if (left === 0) { break inf_leave; }
+	        output[put++] = state.length;
+	        left--;
+	        state.mode = LEN;
+	        break;
+	      case CHECK:
+	        if (state.wrap) {
+	          //=== NEEDBITS(32);
+	          while (bits < 32) {
+	            if (have === 0) { break inf_leave; }
+	            have--;
+	            // Use '|' instead of '+' to make sure that result is signed
+	            hold |= input[next++] << bits;
+	            bits += 8;
+	          }
+	          //===//
+	          _out -= left;
+	          strm.total_out += _out;
+	          state.total += _out;
+	          if (_out) {
+	            strm.adler = state.check =
+	                /*UPDATE(state.check, put - _out, _out);*/
+	                (state.flags ? crc32(state.check, output, _out, put - _out) : adler32(state.check, output, _out, put - _out));
 	
+	          }
+	          _out = left;
+	          // NB: crc32 stored as signed 32-bit int, zswap32 returns signed too
+	          if ((state.flags ? hold : zswap32(hold)) !== state.check) {
+	            strm.msg = 'incorrect data check';
+	            state.mode = BAD;
+	            break;
+	          }
+	          //=== INITBITS();
+	          hold = 0;
+	          bits = 0;
+	          //===//
+	          //Tracev((stderr, "inflate:   check matches trailer\n"));
 	        }
-	        _out = left;
-	        // NB: crc32 stored as signed 32-bit int, zswap32 returns signed too
-	        if ((state.flags ? hold : zswap32(hold)) !== state.check) {
-	          strm.msg = 'incorrect data check';
-	          state.mode = BAD;
-	          break;
+	        state.mode = LENGTH;
+	        /* falls through */
+	      case LENGTH:
+	        if (state.wrap && state.flags) {
+	          //=== NEEDBITS(32);
+	          while (bits < 32) {
+	            if (have === 0) { break inf_leave; }
+	            have--;
+	            hold += input[next++] << bits;
+	            bits += 8;
+	          }
+	          //===//
+	          if (hold !== (state.total & 0xffffffff)) {
+	            strm.msg = 'incorrect length check';
+	            state.mode = BAD;
+	            break;
+	          }
+	          //=== INITBITS();
+	          hold = 0;
+	          bits = 0;
+	          //===//
+	          //Tracev((stderr, "inflate:   length matches trailer\n"));
 	        }
-	        //=== INITBITS();
-	        hold = 0;
-	        bits = 0;
-	        //===//
-	        //Tracev((stderr, "inflate:   check matches trailer\n"));
-	      }
-	      state.mode = LENGTH;
-	      /* falls through */
-	    case LENGTH:
-	      if (state.wrap && state.flags) {
-	        //=== NEEDBITS(32);
-	        while (bits < 32) {
-	          if (have === 0) { break inf_leave; }
-	          have--;
-	          hold += input[next++] << bits;
-	          bits += 8;
-	        }
-	        //===//
-	        if (hold !== (state.total & 0xffffffff)) {
-	          strm.msg = 'incorrect length check';
-	          state.mode = BAD;
-	          break;
-	        }
-	        //=== INITBITS();
-	        hold = 0;
-	        bits = 0;
-	        //===//
-	        //Tracev((stderr, "inflate:   length matches trailer\n"));
-	      }
-	      state.mode = DONE;
-	      /* falls through */
-	    case DONE:
-	      ret = Z_STREAM_END;
-	      break inf_leave;
-	    case BAD:
-	      ret = Z_DATA_ERROR;
-	      break inf_leave;
-	    case MEM:
-	      return Z_MEM_ERROR;
-	    case SYNC:
-	      /* falls through */
-	    default:
-	      return Z_STREAM_ERROR;
+	        state.mode = DONE;
+	        /* falls through */
+	      case DONE:
+	        ret = Z_STREAM_END;
+	        break inf_leave;
+	      case BAD:
+	        ret = Z_DATA_ERROR;
+	        break inf_leave;
+	      case MEM:
+	        return Z_MEM_ERROR;
+	      case SYNC:
+	        /* falls through */
+	      default:
+	        return Z_STREAM_ERROR;
 	    }
 	  }
 	
@@ -17569,7 +17730,7 @@ module.exports =
 	
 	var DIST_CODE_LEN = 512; /* see definition of array dist_code below */
 	
-	// !!!! Use flat array insdead of structure, Freq = i*2, Len = i*2+1
+	// !!!! Use flat array instead of structure, Freq = i*2, Len = i*2+1
 	var static_ltree  = new Array((L_CODES + 2) * 2);
 	zero(static_ltree);
 	/* The static literal tree. Since the bit lengths are imposed, there is no
@@ -18624,7 +18785,7 @@ module.exports =
 	    s.dyn_dtree[d_code(dist) * 2]/*.Freq*/++;
 	  }
 	
-	// (!) This block is disabled in zlib defailts,
+	// (!) This block is disabled in zlib defaults,
 	// don't enable it for binary compatibility
 	
 	//#ifdef TRUNCATE_BLOCK
@@ -18665,7 +18826,7 @@ module.exports =
 /* 153 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	module.exports = __webpack_require__(10)
+	module.exports = __webpack_require__(8)
 
 
 /***/ }),
@@ -18688,7 +18849,7 @@ module.exports =
 	exports.Stream = Stream || exports;
 	exports.Readable = exports;
 	exports.Writable = __webpack_require__(50);
-	exports.Duplex = __webpack_require__(10);
+	exports.Duplex = __webpack_require__(8);
 	exports.Transform = __webpack_require__(49);
 	exports.PassThrough = __webpack_require__(80);
 
@@ -18898,13 +19059,13 @@ module.exports =
 	    attachTo.clearImmediate = clearImmediate;
 	}(typeof self === "undefined" ? typeof global === "undefined" ? this : global : self));
 	
-	/* WEBPACK VAR INJECTION */}.call(exports, (function() { return this; }()), __webpack_require__(21)))
+	/* WEBPACK VAR INJECTION */}.call(exports, (function() { return this; }()), __webpack_require__(29)))
 
 /***/ }),
 /* 159 */
 /***/ (function(module, exports, __webpack_require__) {
 
-	var apply = Function.prototype.apply;
+	/* WEBPACK VAR INJECTION */(function(global) {var apply = Function.prototype.apply;
 	
 	// DOM APIs, for completeness
 	
@@ -18955,9 +19116,17 @@ module.exports =
 	
 	// setimmediate attaches itself to the global object
 	__webpack_require__(158);
-	exports.setImmediate = setImmediate;
-	exports.clearImmediate = clearImmediate;
-
+	// On some exotic environments, it's not clear which object `setimmeidate` was
+	// able to install onto.  Search each possibility in the same order as the
+	// `setimmediate` library.
+	exports.setImmediate = (typeof self !== "undefined" && self.setImmediate) ||
+	                       (typeof global !== "undefined" && global.setImmediate) ||
+	                       (this && this.setImmediate);
+	exports.clearImmediate = (typeof self !== "undefined" && self.clearImmediate) ||
+	                         (typeof global !== "undefined" && global.clearImmediate) ||
+	                         (this && this.clearImmediate);
+	
+	/* WEBPACK VAR INJECTION */}.call(exports, (function() { return this; }())))
 
 /***/ }),
 /* 160 */
@@ -19035,621 +19204,17 @@ module.exports =
 
 /***/ }),
 /* 161 */
-/***/ (function(module, exports) {
-
-	module.exports = function isBuffer(arg) {
-	  return arg && typeof arg === 'object'
-	    && typeof arg.copy === 'function'
-	    && typeof arg.fill === 'function'
-	    && typeof arg.readUInt8 === 'function';
-	}
-
-/***/ }),
-/* 162 */
-/***/ (function(module, exports, __webpack_require__) {
-
-	/* WEBPACK VAR INJECTION */(function(global, process) {// Copyright Joyent, Inc. and other Node contributors.
-	//
-	// Permission is hereby granted, free of charge, to any person obtaining a
-	// copy of this software and associated documentation files (the
-	// "Software"), to deal in the Software without restriction, including
-	// without limitation the rights to use, copy, modify, merge, publish,
-	// distribute, sublicense, and/or sell copies of the Software, and to permit
-	// persons to whom the Software is furnished to do so, subject to the
-	// following conditions:
-	//
-	// The above copyright notice and this permission notice shall be included
-	// in all copies or substantial portions of the Software.
-	//
-	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
-	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-	// USE OR OTHER DEALINGS IN THE SOFTWARE.
-	
-	var formatRegExp = /%[sdj%]/g;
-	exports.format = function(f) {
-	  if (!isString(f)) {
-	    var objects = [];
-	    for (var i = 0; i < arguments.length; i++) {
-	      objects.push(inspect(arguments[i]));
-	    }
-	    return objects.join(' ');
-	  }
-	
-	  var i = 1;
-	  var args = arguments;
-	  var len = args.length;
-	  var str = String(f).replace(formatRegExp, function(x) {
-	    if (x === '%%') return '%';
-	    if (i >= len) return x;
-	    switch (x) {
-	      case '%s': return String(args[i++]);
-	      case '%d': return Number(args[i++]);
-	      case '%j':
-	        try {
-	          return JSON.stringify(args[i++]);
-	        } catch (_) {
-	          return '[Circular]';
-	        }
-	      default:
-	        return x;
-	    }
-	  });
-	  for (var x = args[i]; i < len; x = args[++i]) {
-	    if (isNull(x) || !isObject(x)) {
-	      str += ' ' + x;
-	    } else {
-	      str += ' ' + inspect(x);
-	    }
-	  }
-	  return str;
-	};
-	
-	
-	// Mark that a method should not be used.
-	// Returns a modified function which warns once by default.
-	// If --no-deprecation is set, then it is a no-op.
-	exports.deprecate = function(fn, msg) {
-	  // Allow for deprecating things in the process of starting up.
-	  if (isUndefined(global.process)) {
-	    return function() {
-	      return exports.deprecate(fn, msg).apply(this, arguments);
-	    };
-	  }
-	
-	  if (process.noDeprecation === true) {
-	    return fn;
-	  }
-	
-	  var warned = false;
-	  function deprecated() {
-	    if (!warned) {
-	      if (process.throwDeprecation) {
-	        throw new Error(msg);
-	      } else if (process.traceDeprecation) {
-	        console.trace(msg);
-	      } else {
-	        console.error(msg);
-	      }
-	      warned = true;
-	    }
-	    return fn.apply(this, arguments);
-	  }
-	
-	  return deprecated;
-	};
-	
-	
-	var debugs = {};
-	var debugEnviron;
-	exports.debuglog = function(set) {
-	  if (isUndefined(debugEnviron))
-	    debugEnviron = ({"NODE_ENV":"production"}).NODE_DEBUG || '';
-	  set = set.toUpperCase();
-	  if (!debugs[set]) {
-	    if (new RegExp('\\b' + set + '\\b', 'i').test(debugEnviron)) {
-	      var pid = process.pid;
-	      debugs[set] = function() {
-	        var msg = exports.format.apply(exports, arguments);
-	        console.error('%s %d: %s', set, pid, msg);
-	      };
-	    } else {
-	      debugs[set] = function() {};
-	    }
-	  }
-	  return debugs[set];
-	};
-	
-	
-	/**
-	 * Echos the value of a value. Trys to print the value out
-	 * in the best way possible given the different types.
-	 *
-	 * @param {Object} obj The object to print out.
-	 * @param {Object} opts Optional options object that alters the output.
-	 */
-	/* legacy: obj, showHidden, depth, colors*/
-	function inspect(obj, opts) {
-	  // default options
-	  var ctx = {
-	    seen: [],
-	    stylize: stylizeNoColor
-	  };
-	  // legacy...
-	  if (arguments.length >= 3) ctx.depth = arguments[2];
-	  if (arguments.length >= 4) ctx.colors = arguments[3];
-	  if (isBoolean(opts)) {
-	    // legacy...
-	    ctx.showHidden = opts;
-	  } else if (opts) {
-	    // got an "options" object
-	    exports._extend(ctx, opts);
-	  }
-	  // set default options
-	  if (isUndefined(ctx.showHidden)) ctx.showHidden = false;
-	  if (isUndefined(ctx.depth)) ctx.depth = 2;
-	  if (isUndefined(ctx.colors)) ctx.colors = false;
-	  if (isUndefined(ctx.customInspect)) ctx.customInspect = true;
-	  if (ctx.colors) ctx.stylize = stylizeWithColor;
-	  return formatValue(ctx, obj, ctx.depth);
-	}
-	exports.inspect = inspect;
-	
-	
-	// http://en.wikipedia.org/wiki/ANSI_escape_code#graphics
-	inspect.colors = {
-	  'bold' : [1, 22],
-	  'italic' : [3, 23],
-	  'underline' : [4, 24],
-	  'inverse' : [7, 27],
-	  'white' : [37, 39],
-	  'grey' : [90, 39],
-	  'black' : [30, 39],
-	  'blue' : [34, 39],
-	  'cyan' : [36, 39],
-	  'green' : [32, 39],
-	  'magenta' : [35, 39],
-	  'red' : [31, 39],
-	  'yellow' : [33, 39]
-	};
-	
-	// Don't use 'blue' not visible on cmd.exe
-	inspect.styles = {
-	  'special': 'cyan',
-	  'number': 'yellow',
-	  'boolean': 'yellow',
-	  'undefined': 'grey',
-	  'null': 'bold',
-	  'string': 'green',
-	  'date': 'magenta',
-	  // "name": intentionally not styling
-	  'regexp': 'red'
-	};
-	
-	
-	function stylizeWithColor(str, styleType) {
-	  var style = inspect.styles[styleType];
-	
-	  if (style) {
-	    return '\u001b[' + inspect.colors[style][0] + 'm' + str +
-	           '\u001b[' + inspect.colors[style][1] + 'm';
-	  } else {
-	    return str;
-	  }
-	}
-	
-	
-	function stylizeNoColor(str, styleType) {
-	  return str;
-	}
-	
-	
-	function arrayToHash(array) {
-	  var hash = {};
-	
-	  array.forEach(function(val, idx) {
-	    hash[val] = true;
-	  });
-	
-	  return hash;
-	}
-	
-	
-	function formatValue(ctx, value, recurseTimes) {
-	  // Provide a hook for user-specified inspect functions.
-	  // Check that value is an object with an inspect function on it
-	  if (ctx.customInspect &&
-	      value &&
-	      isFunction(value.inspect) &&
-	      // Filter out the util module, it's inspect function is special
-	      value.inspect !== exports.inspect &&
-	      // Also filter out any prototype objects using the circular check.
-	      !(value.constructor && value.constructor.prototype === value)) {
-	    var ret = value.inspect(recurseTimes, ctx);
-	    if (!isString(ret)) {
-	      ret = formatValue(ctx, ret, recurseTimes);
-	    }
-	    return ret;
-	  }
-	
-	  // Primitive types cannot have properties
-	  var primitive = formatPrimitive(ctx, value);
-	  if (primitive) {
-	    return primitive;
-	  }
-	
-	  // Look up the keys of the object.
-	  var keys = Object.keys(value);
-	  var visibleKeys = arrayToHash(keys);
-	
-	  if (ctx.showHidden) {
-	    keys = Object.getOwnPropertyNames(value);
-	  }
-	
-	  // IE doesn't make error fields non-enumerable
-	  // http://msdn.microsoft.com/en-us/library/ie/dww52sbt(v=vs.94).aspx
-	  if (isError(value)
-	      && (keys.indexOf('message') >= 0 || keys.indexOf('description') >= 0)) {
-	    return formatError(value);
-	  }
-	
-	  // Some type of object without properties can be shortcutted.
-	  if (keys.length === 0) {
-	    if (isFunction(value)) {
-	      var name = value.name ? ': ' + value.name : '';
-	      return ctx.stylize('[Function' + name + ']', 'special');
-	    }
-	    if (isRegExp(value)) {
-	      return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
-	    }
-	    if (isDate(value)) {
-	      return ctx.stylize(Date.prototype.toString.call(value), 'date');
-	    }
-	    if (isError(value)) {
-	      return formatError(value);
-	    }
-	  }
-	
-	  var base = '', array = false, braces = ['{', '}'];
-	
-	  // Make Array say that they are Array
-	  if (isArray(value)) {
-	    array = true;
-	    braces = ['[', ']'];
-	  }
-	
-	  // Make functions say that they are functions
-	  if (isFunction(value)) {
-	    var n = value.name ? ': ' + value.name : '';
-	    base = ' [Function' + n + ']';
-	  }
-	
-	  // Make RegExps say that they are RegExps
-	  if (isRegExp(value)) {
-	    base = ' ' + RegExp.prototype.toString.call(value);
-	  }
-	
-	  // Make dates with properties first say the date
-	  if (isDate(value)) {
-	    base = ' ' + Date.prototype.toUTCString.call(value);
-	  }
-	
-	  // Make error with message first say the error
-	  if (isError(value)) {
-	    base = ' ' + formatError(value);
-	  }
-	
-	  if (keys.length === 0 && (!array || value.length == 0)) {
-	    return braces[0] + base + braces[1];
-	  }
-	
-	  if (recurseTimes < 0) {
-	    if (isRegExp(value)) {
-	      return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
-	    } else {
-	      return ctx.stylize('[Object]', 'special');
-	    }
-	  }
-	
-	  ctx.seen.push(value);
-	
-	  var output;
-	  if (array) {
-	    output = formatArray(ctx, value, recurseTimes, visibleKeys, keys);
-	  } else {
-	    output = keys.map(function(key) {
-	      return formatProperty(ctx, value, recurseTimes, visibleKeys, key, array);
-	    });
-	  }
-	
-	  ctx.seen.pop();
-	
-	  return reduceToSingleString(output, base, braces);
-	}
-	
-	
-	function formatPrimitive(ctx, value) {
-	  if (isUndefined(value))
-	    return ctx.stylize('undefined', 'undefined');
-	  if (isString(value)) {
-	    var simple = '\'' + JSON.stringify(value).replace(/^"|"$/g, '')
-	                                             .replace(/'/g, "\\'")
-	                                             .replace(/\\"/g, '"') + '\'';
-	    return ctx.stylize(simple, 'string');
-	  }
-	  if (isNumber(value))
-	    return ctx.stylize('' + value, 'number');
-	  if (isBoolean(value))
-	    return ctx.stylize('' + value, 'boolean');
-	  // For some reason typeof null is "object", so special case here.
-	  if (isNull(value))
-	    return ctx.stylize('null', 'null');
-	}
-	
-	
-	function formatError(value) {
-	  return '[' + Error.prototype.toString.call(value) + ']';
-	}
-	
-	
-	function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
-	  var output = [];
-	  for (var i = 0, l = value.length; i < l; ++i) {
-	    if (hasOwnProperty(value, String(i))) {
-	      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
-	          String(i), true));
-	    } else {
-	      output.push('');
-	    }
-	  }
-	  keys.forEach(function(key) {
-	    if (!key.match(/^\d+$/)) {
-	      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys,
-	          key, true));
-	    }
-	  });
-	  return output;
-	}
-	
-	
-	function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
-	  var name, str, desc;
-	  desc = Object.getOwnPropertyDescriptor(value, key) || { value: value[key] };
-	  if (desc.get) {
-	    if (desc.set) {
-	      str = ctx.stylize('[Getter/Setter]', 'special');
-	    } else {
-	      str = ctx.stylize('[Getter]', 'special');
-	    }
-	  } else {
-	    if (desc.set) {
-	      str = ctx.stylize('[Setter]', 'special');
-	    }
-	  }
-	  if (!hasOwnProperty(visibleKeys, key)) {
-	    name = '[' + key + ']';
-	  }
-	  if (!str) {
-	    if (ctx.seen.indexOf(desc.value) < 0) {
-	      if (isNull(recurseTimes)) {
-	        str = formatValue(ctx, desc.value, null);
-	      } else {
-	        str = formatValue(ctx, desc.value, recurseTimes - 1);
-	      }
-	      if (str.indexOf('\n') > -1) {
-	        if (array) {
-	          str = str.split('\n').map(function(line) {
-	            return '  ' + line;
-	          }).join('\n').substr(2);
-	        } else {
-	          str = '\n' + str.split('\n').map(function(line) {
-	            return '   ' + line;
-	          }).join('\n');
-	        }
-	      }
-	    } else {
-	      str = ctx.stylize('[Circular]', 'special');
-	    }
-	  }
-	  if (isUndefined(name)) {
-	    if (array && key.match(/^\d+$/)) {
-	      return str;
-	    }
-	    name = JSON.stringify('' + key);
-	    if (name.match(/^"([a-zA-Z_][a-zA-Z_0-9]*)"$/)) {
-	      name = name.substr(1, name.length - 2);
-	      name = ctx.stylize(name, 'name');
-	    } else {
-	      name = name.replace(/'/g, "\\'")
-	                 .replace(/\\"/g, '"')
-	                 .replace(/(^"|"$)/g, "'");
-	      name = ctx.stylize(name, 'string');
-	    }
-	  }
-	
-	  return name + ': ' + str;
-	}
-	
-	
-	function reduceToSingleString(output, base, braces) {
-	  var numLinesEst = 0;
-	  var length = output.reduce(function(prev, cur) {
-	    numLinesEst++;
-	    if (cur.indexOf('\n') >= 0) numLinesEst++;
-	    return prev + cur.replace(/\u001b\[\d\d?m/g, '').length + 1;
-	  }, 0);
-	
-	  if (length > 60) {
-	    return braces[0] +
-	           (base === '' ? '' : base + '\n ') +
-	           ' ' +
-	           output.join(',\n  ') +
-	           ' ' +
-	           braces[1];
-	  }
-	
-	  return braces[0] + base + ' ' + output.join(', ') + ' ' + braces[1];
-	}
-	
-	
-	// NOTE: These type checking functions intentionally don't use `instanceof`
-	// because it is fragile and can be easily faked with `Object.create()`.
-	function isArray(ar) {
-	  return Array.isArray(ar);
-	}
-	exports.isArray = isArray;
-	
-	function isBoolean(arg) {
-	  return typeof arg === 'boolean';
-	}
-	exports.isBoolean = isBoolean;
-	
-	function isNull(arg) {
-	  return arg === null;
-	}
-	exports.isNull = isNull;
-	
-	function isNullOrUndefined(arg) {
-	  return arg == null;
-	}
-	exports.isNullOrUndefined = isNullOrUndefined;
-	
-	function isNumber(arg) {
-	  return typeof arg === 'number';
-	}
-	exports.isNumber = isNumber;
-	
-	function isString(arg) {
-	  return typeof arg === 'string';
-	}
-	exports.isString = isString;
-	
-	function isSymbol(arg) {
-	  return typeof arg === 'symbol';
-	}
-	exports.isSymbol = isSymbol;
-	
-	function isUndefined(arg) {
-	  return arg === void 0;
-	}
-	exports.isUndefined = isUndefined;
-	
-	function isRegExp(re) {
-	  return isObject(re) && objectToString(re) === '[object RegExp]';
-	}
-	exports.isRegExp = isRegExp;
-	
-	function isObject(arg) {
-	  return typeof arg === 'object' && arg !== null;
-	}
-	exports.isObject = isObject;
-	
-	function isDate(d) {
-	  return isObject(d) && objectToString(d) === '[object Date]';
-	}
-	exports.isDate = isDate;
-	
-	function isError(e) {
-	  return isObject(e) &&
-	      (objectToString(e) === '[object Error]' || e instanceof Error);
-	}
-	exports.isError = isError;
-	
-	function isFunction(arg) {
-	  return typeof arg === 'function';
-	}
-	exports.isFunction = isFunction;
-	
-	function isPrimitive(arg) {
-	  return arg === null ||
-	         typeof arg === 'boolean' ||
-	         typeof arg === 'number' ||
-	         typeof arg === 'string' ||
-	         typeof arg === 'symbol' ||  // ES6 symbol
-	         typeof arg === 'undefined';
-	}
-	exports.isPrimitive = isPrimitive;
-	
-	exports.isBuffer = __webpack_require__(161);
-	
-	function objectToString(o) {
-	  return Object.prototype.toString.call(o);
-	}
-	
-	
-	function pad(n) {
-	  return n < 10 ? '0' + n.toString(10) : n.toString(10);
-	}
-	
-	
-	var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
-	              'Oct', 'Nov', 'Dec'];
-	
-	// 26 Feb 16:19:34
-	function timestamp() {
-	  var d = new Date();
-	  var time = [pad(d.getHours()),
-	              pad(d.getMinutes()),
-	              pad(d.getSeconds())].join(':');
-	  return [d.getDate(), months[d.getMonth()], time].join(' ');
-	}
-	
-	
-	// log is just a thin wrapper to console.log that prepends a timestamp
-	exports.log = function() {
-	  console.log('%s - %s', timestamp(), exports.format.apply(exports, arguments));
-	};
-	
-	
-	/**
-	 * Inherit the prototype methods from one constructor into another.
-	 *
-	 * The Function.prototype.inherits from lang.js rewritten as a standalone
-	 * function (not on Function.prototype). NOTE: If this file is to be loaded
-	 * during bootstrapping this function needs to be rewritten using some native
-	 * functions as prototype setup using normal JavaScript does not work as
-	 * expected during bootstrapping (see mirror.js in r114903).
-	 *
-	 * @param {function} ctor Constructor function which needs to inherit the
-	 *     prototype.
-	 * @param {function} superCtor Constructor function to inherit prototype from.
-	 */
-	exports.inherits = __webpack_require__(9);
-	
-	exports._extend = function(origin, add) {
-	  // Don't do anything if add isn't an object
-	  if (!add || !isObject(add)) return origin;
-	
-	  var keys = Object.keys(add);
-	  var i = keys.length;
-	  while (i--) {
-	    origin[keys[i]] = add[keys[i]];
-	  }
-	  return origin;
-	};
-	
-	function hasOwnProperty(obj, prop) {
-	  return Object.prototype.hasOwnProperty.call(obj, prop);
-	}
-	
-	/* WEBPACK VAR INJECTION */}.call(exports, (function() { return this; }()), __webpack_require__(21)))
-
-/***/ }),
-/* 163 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	
 	/* styles */
-	__webpack_require__(167)
+	__webpack_require__(165)
 	
 	var Component = __webpack_require__(83)(
 	  /* script */
 	  __webpack_require__(84),
 	  /* template */
-	  __webpack_require__(166),
+	  __webpack_require__(164),
 	  /* scopeId */
 	  null,
 	  /* cssModules */
@@ -19660,14 +19225,14 @@ module.exports =
 
 
 /***/ }),
-/* 164 */
+/* 162 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	var Component = __webpack_require__(83)(
 	  /* script */
 	  __webpack_require__(85),
 	  /* template */
-	  __webpack_require__(165),
+	  __webpack_require__(163),
 	  /* scopeId */
 	  null,
 	  /* cssModules */
@@ -19678,7 +19243,7 @@ module.exports =
 
 
 /***/ }),
-/* 165 */
+/* 163 */
 /***/ (function(module, exports) {
 
 	module.exports={render:function (){var _vm=this;var _h=_vm.$createElement;var _c=_vm._self._c||_h;
@@ -19699,7 +19264,7 @@ module.exports =
 	},staticRenderFns: []}
 
 /***/ }),
-/* 166 */
+/* 164 */
 /***/ (function(module, exports) {
 
 	module.exports={render:function (){var _vm=this;var _h=_vm.$createElement;var _c=_vm._self._c||_h;
@@ -19715,7 +19280,7 @@ module.exports =
 	},staticRenderFns: []}
 
 /***/ }),
-/* 167 */
+/* 165 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	// style-loader: Adds some css to the DOM by adding a <style> tag
@@ -19725,10 +19290,10 @@ module.exports =
 	if(typeof content === 'string') content = [[module.id, content, '']];
 	if(content.locals) module.exports = content.locals;
 	// add the styles to the DOM
-	var update = __webpack_require__(168)("2bbec363", content, true);
+	var update = __webpack_require__(166)("2bbec363", content, true);
 
 /***/ }),
-/* 168 */
+/* 166 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	/*
@@ -19747,7 +19312,7 @@ module.exports =
 	  ) }
 	}
 	
-	var listToStyles = __webpack_require__(169)
+	var listToStyles = __webpack_require__(167)
 	
 	/*
 	type StyleObject = {
@@ -19949,7 +19514,7 @@ module.exports =
 
 
 /***/ }),
-/* 169 */
+/* 167 */
 /***/ (function(module, exports) {
 
 	/**
@@ -19982,7 +19547,7 @@ module.exports =
 
 
 /***/ }),
-/* 170 */
+/* 168 */
 /***/ (function(module, exports) {
 
 	/* (ignored) */

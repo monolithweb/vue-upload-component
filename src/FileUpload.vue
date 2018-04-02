@@ -246,10 +246,7 @@
 					this.files.splice(0, this.files.length);
 				}
 			},
-			debouncedResetDragActive: debounce(function () {
-				this._dropActive = 0;
-				this.dropActive = !!this._dropActive;
-			}, 6000),
+
 			select(file) {
 				if (typeof file == 'object') {
 					var index = this.files.indexOf(file)
@@ -335,6 +332,7 @@
 						});
 					};
 					reader.onerror = function (e) {
+						console.log('file read error', e);
 					};
 					reader.readAsArrayBuffer(file['file']);
 				} else {
@@ -377,7 +375,11 @@
 					this.dropElement.addEventListener('drop', this._onDrop, false);
 				}
 			},
-
+			debouncedResetDragActive: debounce(function () {
+				console.log(`debounced`);
+				this._dropActive = 0;
+				this.dropActive = !!this._dropActive;
+			}, 6000),
 			_onDragenter(e) {
 				this._dropActive++;
 				this.dropActive = !!this._dropActive;
@@ -387,7 +389,7 @@
 
 			_onDragleave(e) {
 				e.preventDefault();
-				if (this._dropActive > 0) this._dropActive--;
+				this._dropActive--;
 				if (e.target.nodeName == 'HTML' || e.target.nodeName == 'DIV' || (e.clientX <= 0) || (e.clientX >= window.innerWidth) || (e.clientY <= 0) || (e.clientY >= window.innerHeight)) {
 					this.dropActive = !!this._dropActive;
 				}
@@ -491,6 +493,7 @@
 							continue;
 						}
 					} else {
+						console.log('in mode html4');
 						if (file.postAction) {
 							this._fileUploadHtml4(file);
 						} else {
