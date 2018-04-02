@@ -49,7 +49,6 @@
 <script>
 	import InputFile from './InputFile.vue';
 	import JSZip from 'jszip';
-	import {debounce} from './debounce';
 
 	export default {
 		components: {
@@ -134,6 +133,7 @@
 				uploaded: true,
 				destroy: false,
 				dropActive: false,
+				resetDragActiveTimeoutToken: 0
 			}
 		},
 
@@ -274,7 +274,7 @@
 			},
 
 			abort(file) {
-				file = this.select(file)
+				file = this.select(file);
 				if (file) {
 					file.active = false
 				}
@@ -375,15 +375,14 @@
 					this.dropElement.addEventListener('drop', this._onDrop, false);
 				}
 			},
-			debouncedResetDragActive: debounce(function () {
-				console.log(`debounced`);
-				this._dropActive = 0;
-				this.dropActive = !!this._dropActive;
-			}, 6000),
 			_onDragenter(e) {
 				this._dropActive++;
 				this.dropActive = !!this._dropActive;
-				this.debouncedResetDragActive();
+				clearTimeout(this.resetDragActiveTimeoutToken);
+				this.resetDragActiveTimeoutToken = setTimeout(() => {
+					this._dropActive = 0;
+					this.dropActive = false;
+				}, 6000);
 				e.preventDefault();
 			},
 
@@ -398,10 +397,10 @@
 				e.preventDefault();
 			},
 
-
 			_onDrop(e) {
 				this._dropActive = 0;
 				this.dropActive = false;
+				clearTimeout(this.resetDragActiveTimeoutToken);
 				e.preventDefault();
 				if (e.dataTransfer.files.length) {
 					for (let i = 0; i < e.dataTransfer.files.length; i++) {
